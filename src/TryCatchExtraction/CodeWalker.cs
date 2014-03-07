@@ -43,11 +43,17 @@ namespace CatchBlockExtraction
             int numFiles = FileNames.Count();
             Logger.Log("Loading " + numFiles + " *.cs files.");
             // parallelization
-            var treeList = FileNames.AsParallel()
+            var treeAndModelList = FileNames.AsParallel()
                 .Select(fileName => LoadSourceFile(fileName))
                 .ToList();
-            var compilation = BuildCompilation(treeList);
-            GetCodeStatistics(treeList, compilation);      
+            
+            var treeAndModelDic = new Dictionary<SyntaxTree, SemanticModel>();
+            foreach (var treeAndModel in treeAndModelList)
+            {
+                treeAndModelDic.Add(treeAndModel.Item1, treeAndModel.Item2);
+            }
+
+            CodeAnalyzer.AnalyzeAllTrees(treeAndModelDic);      
         }
 
         public static void LoadByTxtFile(String folderPath)
@@ -72,14 +78,13 @@ namespace CatchBlockExtraction
             }
 
             var tree = SyntaxTree.ParseText(content);
-            var treeList = new List<SyntaxTree>(){ tree }; 
-            var compilation = BuildCompilation(treeList);
-            GetCodeStatistics(treeList, compilation);
-
-            Program.patternMatchRule.PrintMatchedResults();
+            var model = GetSemanticInfo(tree);
+            var treeAndModelDic = new Dictionary<SyntaxTree, SemanticModel>();
+            treeAndModelDic.Add(tree, model);
+            CodeAnalyzer.AnalyzeAllTrees(treeAndModelDic);
         }
 
-        public static SyntaxTree LoadSourceFile(String sourceFile)
+        public static Tuple<SyntaxTree, SemanticModel> LoadSourceFile(String sourceFile)
         {
             Logger.Log("Loading source file: " + sourceFile);
 //            if (InputFileName.Split('\\').Last().Contains("Log"))
@@ -87,91 +92,46 @@ namespace CatchBlockExtraction
 //                fileContent = "";
 //            }
             var tree = SyntaxTree.ParseFile(sourceFile);
-            return tree;
+            var model = GetSemanticInfo(tree);
+           
+            return new Tuple<SyntaxTree, SemanticModel>(tree, model);
         }
 
-        public static void GetCodeStatistics(List<SyntaxTree> treeList, Compilation compilation)
+        public static SemanticModel GetSemanticInfo(SyntaxTree tree)
         {
-            // statistics
-            int numFiles = treeList.Count;
-            var treeNode = treeList.Select(tree => tree.GetRoot().DescendantNodes().Count());
-            Logger.Log("Num of syntax nodes: " + treeNode.Sum());
-            Logger.Log("Num of source files: " + numFiles);
-            List<CodeStatistics> codeStatsList = treeList.AsParallel()
-                .Select(tree => CodeAnalyzer.AnalyzeSingleTree(tree, compilation)).ToList();
-
-            CodeStatistics totalStats = new CodeStatistics();
-            Dictionary<String, int> exceptionTypeDic = new Dictionary<String, int>();
-            var sb = new StringBuilder(treeList[0].Length * treeList.Count); //initial length
-            for (int i = 0; i < numFiles; i++)
-            {
-                sb.Append(treeList[i].GetText());
-                String fileName = treeList[i].FilePath;
-                Program.FolderFileInfo.Add(new FileInfo(fileName,
-                    codeStatsList[i].CodeStats["NumLOC"]));
-                // get the total statistics
-                Tools.MergeDic<String>(ref totalStats.CodeStats, codeStatsList[i].CodeStats);
-                Tools.MergeDic<String>(ref exceptionTypeDic, codeStatsList[i].ExceptionTypeDic);
-            }
-
-            // Log statistics
-            foreach (var stat in totalStats.CodeStats.Keys)
-            {
-                Logger.Log(stat + ": " + totalStats.CodeStats[stat]);
-            }
-            Logger.Log("NumExceptionType: " + exceptionTypeDic.Count);
-
-            // Save all the source code into a txt file
-            String txtFilePath = IOFileProcessing.CompleteFileName("AllSource.txt");
-            using (StreamWriter sw = new StreamWriter(txtFilePath))
-            {
-                sw.Write(sb.ToString());
-            }
-        }
-
-        public static Compilation BuildCompilation(List<SyntaxTree> treelist)
-        {
-            List<String> allLibNameList = new List<String>();
+            Dictionary<String, String> libFilePaths = new Dictionary<String, String>();
             List<MetadataReference> reflist = new List<MetadataReference>();
+            var mscorlib = MetadataReference.CreateAssemblyReference("mscorlib");
+            reflist.Add(mscorlib);
 
-            // Add all the application API references
+            // Find all the application API dll references files
             IEnumerable<String> appLibFiles = Directory.EnumerateFiles(IOFileProcessing.FolderPath,
                 "*.dll", SearchOption.AllDirectories);
-            foreach (var libfile in appLibFiles)
+            foreach (var libFile in appLibFiles)
             {                
-                var libName = libfile.Split('\\').Last();
+                var libName = libFile.Split('\\').Last();
                 libName = libName.Substring(0, libName.LastIndexOf('.'));
-                if (allLibNameList.Contains(libName)) continue;
-                allLibNameList.Add(libName);
-                var reference = new MetadataFileReference(libfile);
-                reflist.Add(reference);
-                Logger.Log("Adding reference: " + libName + ".dll");
+                if (libFilePaths.ContainsKey(libName)) continue;
+                libFilePaths.Add(libName, libFile);
             }
 
             // Collect the system API references from using directives
-            var totalUsingList = treelist.AsParallel().Select(
-                delegate(SyntaxTree tree) 
-                {
-                    var root = tree.GetRoot();
-                    var usingList = root.DescendantNodes().OfType<UsingDirectiveSyntax>();
-                    var resultlist = usingList
-                        .Where(lib => !allLibNameList.Contains(lib.Name.ToString()))
-                        .Select(lib => lib.Name.ToString()).ToList();
-                    return resultlist;
-                });
-            // transfer to String list
-            List<String> libFullNameList = totalUsingList.SelectMany(x => x).ToList();
-            // create metareference                
+            var root = tree.GetRoot();
+            var usingList = root.DescendantNodes().OfType<UsingDirectiveSyntax>();
+            var libFullNameList = usingList.Select(usingLib => usingLib.Name.ToString()).ToList();
+    
+            // create metareference 
+            List<String> allLibNames = new List<string>();   
             foreach (var libFullName in libFullNameList)
             {
                 String libName = libFullName;
                 MetadataReference reference = null;
                 while (libName != "" && reference == null)
                 {
-                    if (allLibNameList.Contains(libName)) break;
-
-                    allLibNameList.Add(libName);
-
+                    if (allLibNames.Contains(libName))
+                        break;
+                    allLibNames.Add(libName);
+                    bool isValidSysAPI = true;
                     try
                     {
                         // Add system API libs by MetadataReference.CreateAssemblyReference
@@ -179,14 +139,27 @@ namespace CatchBlockExtraction
                     }
                     catch (Exception)
                     {
-                        // handle cases that "libName.dll" does not exist
-                        int idx = libName.LastIndexOf('.');
-                        if (idx == -1)
+                        isValidSysAPI = false;
+                    }
+
+                    if (isValidSysAPI == false)
+                    {
+                        try
                         {
-                            libName = "";
-                            break;
+                            // Add application API libs by new MetadataFileReference(libFile) 
+                            reference = new MetadataFileReference(libFilePaths[libName]);
                         }
-                        libName = libName.Substring(0, idx);
+                        catch (Exception)
+                        {
+                            // handle cases that "libName.dll" does not exist
+                            int idx = libName.LastIndexOf('.');
+                            if (idx == -1)
+                            {
+                                libName = "";
+                                break;
+                            }
+                            libName = libName.Substring(0, idx);
+                        }
                     }
                 }
                 
@@ -196,74 +169,29 @@ namespace CatchBlockExtraction
                     reflist.Add(reference);
                 }  
             }
-           
+
             var compilation = Compilation.Create(
-                outputName: "AllCompilation", 
-                syntaxTrees: treelist, 
+                outputName: "ACompilation",
+                syntaxTrees: new[] { tree }, 
                 references: reflist);
 
-            return compilation;
+            var model = compilation.GetSemanticModel(tree);
+
+            return model;
         }
 
-    }     
+    }
 
-    class VisitSyntaxNode : SyntaxWalker
+    /// <summary>
+    /// Remove the try-catch block of a code snippet
+    /// </summary>
+    public class TryStatementRemover : SyntaxRewriter
     {
-        public IMatchListsForMultiplePatterns thisPatternCollection;
-        public SemanticModel semanticModel;
-
-        public VisitSyntaxNode(SemanticModel model, IMatchListsForMultiplePatterns patternMatchRule)
+        public override SyntaxNode VisitTryStatement(TryStatementSyntax node)
         {
-            semanticModel = model;
-            thisPatternCollection = patternMatchRule;
+            //SyntaxNode updatedNode = base.VisitTryStatement(node);
+            return null;
         }
-
-        /// <summary>
-        /// Override the visit methods to process each statement when traversing the code
-        /// !!!This Line Matters!!! Make sure the base method is called. 
-        /// </summary>
-        /// <param name="node"></param>
-        public override void VisitMethodDeclaration(MethodDeclarationSyntax node)
-        {
-            base.VisitMethodDeclaration(node);
-            thisPatternCollection.CheckMutiplePatternsAndRecordMatches(node, semanticModel);
-        }
-
-        public override void VisitThrowStatement(ThrowStatementSyntax node)
-        {
-            base.VisitThrowStatement(node);
-            thisPatternCollection.CheckMutiplePatternsAndRecordMatches(node, semanticModel);
-        }
-        public override void VisitCatchClause(CatchClauseSyntax node)
-        {
-            base.VisitCatchClause(node);
-            thisPatternCollection.CheckMutiplePatternsAndRecordMatches(node, semanticModel);
-        }
-
-        public override void VisitInvocationExpression(InvocationExpressionSyntax node)
-        {
-            base.VisitInvocationExpression(node);
-            thisPatternCollection.CheckMutiplePatternsAndRecordMatches(node, semanticModel);
-        }
-
-        public override void VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
-        {
-            base.VisitObjectCreationExpression(node);
-            thisPatternCollection.CheckMutiplePatternsAndRecordMatches(node, semanticModel);
-        }
-
-        public override void VisitIfStatement(IfStatementSyntax node)
-        {
-            base.VisitIfStatement(node);
-            thisPatternCollection.CheckMutiplePatternsAndRecordMatches(node, semanticModel);
-        }
-
-        public override void VisitSwitchStatement(SwitchStatementSyntax node)
-        {
-            base.VisitSwitchStatement(node);
-            thisPatternCollection.CheckMutiplePatternsAndRecordMatches(node, semanticModel);
-        }
-
     }
 }
 

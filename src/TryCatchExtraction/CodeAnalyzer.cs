@@ -11,41 +11,58 @@ using System.IO;
 
 namespace CatchBlockExtraction
 {
-    class CodeStatistics
-    {
-        public Dictionary<String, int> CodeStats; 
-        public Dictionary<String, int> ExceptionTypeDic;
-
-        public CodeStatistics ()
-        {
-            CodeStats = new Dictionary<String, int>(); 
-            CodeStats.Add("NumLOC", 0);
-            CodeStats.Add("NumLoggedLOC", 0);           
-            CodeStats.Add("NumCall", 0);
-            CodeStats.Add("NumLogging", 0);
-            CodeStats.Add("NumClass", 0);
-            CodeStats.Add("NumLoggedClass", 0);
-            CodeStats.Add("NumMethod", 0);
-            CodeStats.Add("NumLoggedMethod", 0);
-            CodeStats.Add("NumLoggedFile", 0);
-            CodeStats.Add("NumCatchBlock", 0);
-            CodeStats.Add("NumLoggedCatchBlock", 0);          
-        }
-    }
-
     static class CodeAnalyzer
     {
+
+        public static TryStatementRemover tryblockremover = new TryStatementRemover();
+
+        /// <summary>
+        /// Analyze the code by all trees and semantic models
+        /// </summary>
+        /// <param name="treeList"></param>
+        /// <param name="compilation"></param>
+        public static void AnalyzeAllTrees(Dictionary<SyntaxTree, SemanticModel> treeAndModelDic)
+        {
+            // statistics
+            int numFiles = treeAndModelDic.Count;
+            var treeNode = treeAndModelDic.Keys
+                .Select(tree => tree.GetRoot().DescendantNodes().Count());
+            Logger.Log("Num of syntax nodes: " + treeNode.Sum());
+            Logger.Log("Num of source files: " + numFiles);
+            // analyze every tree simultaneously
+            var codeStatsList = treeAndModelDic.Keys.AsParallel()
+                .Select(tree => CodeAnalyzer.AnalyzeATree(tree, treeAndModelDic)).ToList();
+
+            CodeStatistics allStats = new CodeStatistics(codeStatsList);
+
+            // Log statistics
+            allStats.PrintSatistics();
+
+            // Save all the source code into a txt file
+            var sb = new StringBuilder(treeAndModelDic.Keys.First().Length * numFiles); //initial length
+            foreach (var stat in codeStatsList)
+            {
+                sb.Append(stat.Item1.GetText());
+            }
+            String txtFilePath = IOFileProcessing.CompleteFileName("AllSource.txt");
+            using (StreamWriter sw = new StreamWriter(txtFilePath))
+            {
+                sw.Write(sb.ToString());
+            }
+        }
+
         /// <summary>
         /// Analyze the code statistics of a single AST
         /// </summary>
         /// <param name="tree"></param>
         /// <param name="compilation"></param>
         /// <returns></returns>
-        public static CodeStatistics AnalyzeSingleTree(SyntaxTree tree, Compilation compilation)
+        public static Tuple<SyntaxTree, TreeStatistics> AnalyzeATree(SyntaxTree tree, 
+            Dictionary<SyntaxTree, SemanticModel> treeAndModelDic)
         {
-            CodeStatistics stats = new CodeStatistics();
+            TreeStatistics stats = new TreeStatistics();
             var root = tree.GetRoot();
-            var model = compilation.GetSemanticModel(tree);
+            var model = treeAndModelDic[tree];
 
             // Num of LOC
             stats.CodeStats["NumLOC"] = tree.GetText().LineCount;
@@ -98,7 +115,7 @@ namespace CatchBlockExtraction
                         try
                         {
                             var classNode = logging.Ancestors().OfType<ClassDeclarationSyntax>().First();
-                            Tools.MergeDic<ClassDeclarationSyntax>(ref loggedClasses, 
+                            MergeDic<ClassDeclarationSyntax>(ref loggedClasses, 
                                 new Dictionary<ClassDeclarationSyntax, int>(){{classNode, 1}});
                         }
                         catch (Exception)
@@ -113,7 +130,7 @@ namespace CatchBlockExtraction
                         try
                         {
                             var method = logging.Ancestors().OfType<BaseMethodDeclarationSyntax>().First();
-                            Tools.MergeDic<BaseMethodDeclarationSyntax>(ref loggedMethods,
+                            MergeDic<BaseMethodDeclarationSyntax>(ref loggedMethods,
                                 new Dictionary<BaseMethodDeclarationSyntax, int>() { { method, 1 } });
                         }
                         catch (Exception)
@@ -128,7 +145,7 @@ namespace CatchBlockExtraction
                         try
                         {
                             var catchBlock = logging.Ancestors().OfType<CatchClauseSyntax>().First();
-                            Tools.MergeDic<CatchClauseSyntax>(ref loggedCatchBlocks,
+                            MergeDic<CatchClauseSyntax>(ref loggedCatchBlocks,
                                 new Dictionary<CatchClauseSyntax, int>() { { catchBlock, 1 } });
                         }
                         catch (Exception)
@@ -148,14 +165,33 @@ namespace CatchBlockExtraction
             foreach (var catchblock in catchList)
             {
                 var exceptionType = GetExceptionType(catchblock, model);
-                Tools.MergeDic<String>(ref exceptionTypeDic,
+                MergeDic<String>(ref exceptionTypeDic,
                     new Dictionary<String, int>() { { exceptionType, 1 } });
             }
             stats.ExceptionTypeDic = exceptionTypeDic;
 
-            return stats;
+            List<CatchBlock> catchStatsList = catchList.AsParallel()
+                .Select(catchblock => AnalyzeACatchBlock(catchblock, model, treeAndModelDic)).ToList();
+            stats.CatchList = catchStatsList;
+
+            return new Tuple<SyntaxTree, TreeStatistics>(tree, stats);
         }
 
+        public static CatchBlock AnalyzeACatchBlock(CatchClauseSyntax catchblock, SemanticModel model,
+            Dictionary<SyntaxTree, SemanticModel> treeAndModelDic)
+        {
+            CatchBlock catchBlockInfo = new CatchBlock();
+            catchBlockInfo.ExceptionType = GetExceptionType(catchblock, model);
+            if (FindLoggingIn(catchblock) != null)
+            {
+                catchBlockInfo.BoolFeatures["Logged"] = 1;
+            }
+
+            var tryBlock = catchblock.Parent as TryStatementSyntax;
+            catchBlockInfo.TextFeatures = GetMethodNames(tryBlock, model);
+
+            return catchBlockInfo;
+        }
 
         /// <summary>
         /// To check whether an invocation is a logging statement
@@ -188,19 +224,139 @@ namespace CatchBlockExtraction
             return false;
         }
 
-        static public InvocationExpressionSyntax FindLoggingIn(SyntaxNode PieceOfCode)
+        static public InvocationExpressionSyntax FindLoggingIn(SyntaxNode codeSnippet)
         {
             try
             {
-                var LogStatement = PieceOfCode.DescendantNodesAndSelf()
-                    .OfType<InvocationExpressionSyntax>().First(IsLoggingStatement);
-                return LogStatement;
+                bool hasTryStatement = true;
+                try
+                {
+                    var tryStatement = codeSnippet.DescendantNodesAndSelf()
+                        .OfType<TryStatementSyntax>().First();
+                }
+                catch (InvalidOperationException)
+                {
+                    hasTryStatement = false;
+                }
+                if (hasTryStatement == true)
+                {
+                    // remove try-catch-finally block inside
+                    var updatedNode = tryblockremover.Visit(codeSnippet);
+                    return FindLoggingIn(updatedNode);               
+                }
+                else
+                {
+                    var loggingStatement = codeSnippet.DescendantNodesAndSelf()
+                        .OfType<InvocationExpressionSyntax>().First(IsLoggingStatement);
+                    return loggingStatement;
+                }
             }
             catch
             {
+                // has no InvocationExpressionSyntax
                 return null;
             }
         }
+
+        public static String GetExceptionType(CatchClauseSyntax catchClause, SemanticModel semanticModel)
+        {
+            try
+            {
+                TypeSyntax type = catchClause.Declaration.Type;
+                TypeSymbol typeSymbol = semanticModel.GetTypeInfo(type).Type;
+                if (typeSymbol != null)
+                {
+                    return typeSymbol.ToString(); //return "System.IO.IOException
+                }
+                else
+                {
+                    return type.ToString();
+                }
+            }
+            catch
+            {
+                return "Exception";
+            }
+        }
+
+        public static Dictionary<String, int> GetMethodNames(SyntaxNode codeSnippet, SemanticModel model)
+        {
+            Dictionary<String, int> methodNames = new Dictionary<String, int>();
+            List<InvocationExpressionSyntax> methodList;
+
+            if (codeSnippet is TryStatementSyntax)
+            {
+                codeSnippet = (codeSnippet as TryStatementSyntax).Block;
+            }
+            
+            bool hasTryStatement = true;
+            try
+            {
+                var tryStatement = codeSnippet.DescendantNodes()
+                    .OfType<TryStatementSyntax>().First();
+            }
+            catch (InvalidOperationException)
+            {
+                hasTryStatement = false;
+            }
+            if (hasTryStatement == true)
+            {
+                var childNodes = codeSnippet.ChildNodes().OfType<StatementSyntax>();
+
+                var methodNodeList = childNodes
+                    .Where(child => !(child is TryStatementSyntax))
+                    .Select(child => child.DescendantNodesAndSelf()
+                        .OfType<InvocationExpressionSyntax>().ToList());
+
+                methodList = methodNodeList.SelectMany(x => x).ToList();
+            }
+            else // has no try statement inside
+            {
+                methodList = codeSnippet.DescendantNodes().OfType<InvocationExpressionSyntax>().ToList();
+            }
+            
+            foreach (var invocation in methodList)
+            {
+                //Console.WriteLine(invocation);
+                if (IsLoggingStatement(invocation))
+                    continue; // ignore the logging method
+                try
+                {
+                    var symbolInfo = model.GetSymbolInfo(invocation);
+                    var symbol = symbolInfo.Symbol;
+                    String methodName = symbol.ToString();
+                    MergeDic<String>(ref methodNames,
+                                new Dictionary<String, int>() { { methodName, 1 } });
+                }
+                catch (Exception)
+                {
+                    // no symbol info
+                    MergeDic<String>(ref methodNames,
+                            new Dictionary<String, int>() { { invocation.ToString(), 1 } });
+                } 
+
+            }
+            return methodNames;
+        }
+
+        public static void MergeDic<T>(ref Dictionary<T, int> dic1, Dictionary<T, int> dic2)
+        {
+            foreach (var key in dic2.Keys)
+            {
+                if (dic1.ContainsKey(key))
+                {
+                    dic1[key] += dic2[key];
+                }
+                else
+                {
+                    dic1.Add(key, dic2[key]);
+                }
+            }
+        }
+
+
+
+
 
         public static bool IsInCatch(SyntaxNode node)
         {
@@ -584,27 +740,6 @@ namespace CatchBlockExtraction
                 }
             }
             return excepType;
-        }
-
-        public static String GetExceptionType(CatchClauseSyntax catchClause, SemanticModel semanticModel)
-        {
-            try
-            {
-                TypeSyntax Type = catchClause.Declaration.Type;
-                TypeSymbol typeSymbol = semanticModel.GetTypeInfo(Type).Type;
-                if (typeSymbol != null)
-                {
-                    return typeSymbol.ToString(); //return "System.IO.IOException
-                }
-                else
-                {
-                    return Type.ToString();
-                }
-            }
-            catch
-            {
-                return "Undeclared.Exception.Type";
-            }
         }
 
         static public List<String> GetExceptionAPIs(SyntaxNode node, SemanticModel semanticModel)

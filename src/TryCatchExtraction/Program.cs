@@ -11,7 +11,6 @@ namespace CatchBlockExtraction
     class Program
     {
         public static FolderInfo FolderFileInfo;
-        public static IMatchListsForMultiplePatterns patternMatchRule;
 
         static void Main(string[] args)
         {
@@ -26,8 +25,6 @@ namespace CatchBlockExtraction
             Logger.Initialize();
             DateTime StartTime = DateTime.Now;          
             FolderFileInfo = new FolderInfo();
-            patternMatchRule = new MatchbyPatternCategory();
-
             FolderInfo.InputMode = inputMode;
            
             Config.Load(IOFileProcessing.CompleteFileName("Config.txt"));
@@ -37,7 +34,7 @@ namespace CatchBlockExtraction
             walker.LoadByInputMode(inputMode, filePath);
 
             DateTime EndTime = DateTime.Now;
-            Logger.Log("Raw feature file generated. Total Time: " + (EndTime - StartTime).ToString());
+            Logger.Log("All done. Elapsed time: " + (EndTime - StartTime).ToString());
             Logger.Log("Press any key to terminate!");
             Logger.Close();
             Console.ReadKey();  

@@ -193,21 +193,4 @@ namespace CatchBlockExtraction
         }
     }
 
-    public class Tools
-    {
-        public static void MergeDic<T>(ref Dictionary<T, int> dic1, Dictionary<T, int> dic2)
-        {
-            foreach (var key in dic2.Keys)
-            {
-                if (dic1.ContainsKey(key))
-                {
-                    dic1[key] += dic2[key];
-                }
-                else
-                {
-                    dic1.Add(key, dic2[key]);
-                }
-            }
-        }
-    }
 }
