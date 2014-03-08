@@ -21,16 +21,17 @@ namespace CatchBlockExtraction
         /// </summary>
         /// <param name="treeList"></param>
         /// <param name="compilation"></param>
-        public static void AnalyzeAllTrees(List<SyntaxTree> treeList, Compilation compilation)
+        public static void AnalyzeAllTrees(Dictionary<SyntaxTree, SemanticModel> treeAndModelDic)
         {
             // statistics
-            int numFiles = treeList.Count;
-            var treeNode = treeList.Select(tree => tree.GetRoot().DescendantNodes().Count());
+            int numFiles = treeAndModelDic.Count;
+            var treeNode = treeAndModelDic.Keys
+                .Select(tree => tree.GetRoot().DescendantNodes().Count());
             Logger.Log("Num of syntax nodes: " + treeNode.Sum());
             Logger.Log("Num of source files: " + numFiles);
             // analyze every tree simultaneously
-            var codeStatsList = treeList.AsParallel()
-                .Select(tree => CodeAnalyzer.AnalyzeATree(tree, compilation)).ToList();
+            var codeStatsList = treeAndModelDic.Keys.AsParallel()
+                .Select(tree => CodeAnalyzer.AnalyzeATree(tree, treeAndModelDic)).ToList();
 
             CodeStatistics allStats = new CodeStatistics(codeStatsList);
 
@@ -38,7 +39,7 @@ namespace CatchBlockExtraction
             allStats.PrintSatistics();
 
             // Save all the source code into a txt file
-            var sb = new StringBuilder(treeList.First().Length * numFiles); //initial length
+            var sb = new StringBuilder(treeAndModelDic.Keys.First().Length * numFiles); //initial length
             foreach (var stat in codeStatsList)
             {
                 sb.Append(stat.Item1.GetText());
@@ -56,12 +57,12 @@ namespace CatchBlockExtraction
         /// <param name="tree"></param>
         /// <param name="compilation"></param>
         /// <returns></returns>
-        public static Tuple<SyntaxTree, TreeStatistics> AnalyzeATree(SyntaxTree tree, 
-            Compilation compilation)
+        public static Tuple<SyntaxTree, TreeStatistics> AnalyzeATree(SyntaxTree tree,
+            Dictionary<SyntaxTree, SemanticModel> treeAndModelDic)
         {
             TreeStatistics stats = new TreeStatistics();
             var root = tree.GetRoot();
-            var model = compilation.GetSemanticModel(tree);
+            var model = treeAndModelDic[tree];
 
             // Num of LOC
             stats.CodeStats["NumLOC"] = tree.GetText().LineCount;
@@ -146,14 +147,14 @@ namespace CatchBlockExtraction
 
             // Statistics and features of catch blocks
             List<CatchBlock> catchStatsList = catchList.AsParallel()
-                .Select(catchblock => AnalyzeACatchBlock(catchblock, model, compilation)).ToList();
+                .Select(catchblock => AnalyzeACatchBlock(catchblock, model, treeAndModelDic)).ToList();
             stats.CatchList = catchStatsList;
 
             return new Tuple<SyntaxTree, TreeStatistics>(tree, stats);
         }
 
         public static CatchBlock AnalyzeACatchBlock(CatchClauseSyntax catchblock, SemanticModel model,
-            Compilation compilation)
+            Dictionary<SyntaxTree, SemanticModel> treeAndModelDic)
         {
             CatchBlock catchBlockInfo = new CatchBlock();
             catchBlockInfo.ExceptionType = GetExceptionType(catchblock, model);
@@ -163,7 +164,7 @@ namespace CatchBlockExtraction
             }
 
             var tryBlock = catchblock.Parent as TryStatementSyntax;
-            catchBlockInfo.TextFeatures = GetInvokedMethodNames(tryBlock, model);
+            catchBlockInfo.TextFeatures = GetAllInvokedMethodNamesByBFS(tryBlock, model, treeAndModelDic);
 
             return catchBlockInfo;
         }
@@ -248,20 +249,101 @@ namespace CatchBlockExtraction
             }
             catch
             {
-                return "Exception";
+                // the default exception type
+                return "System.Exception";
             }
         }
 
-        public static Dictionary<String, int> GetInvokedMethodNames(SyntaxNode codeSnippet, SemanticModel model)
+        public static Dictionary<String, int> GetAllInvokedMethodNamesByBFS(SyntaxNode codeSnippet, 
+            SemanticModel semanticModel, Dictionary<SyntaxTree, SemanticModel> treeAndModelDic)
         {
-            Dictionary<String, int> methodNames = new Dictionary<String, int>();
-            List<InvocationExpressionSyntax> methodList;
+            Dictionary<String, int> allInovkedMethods = new Dictionary<String, int>();            
+            Queue<Tuple<SyntaxNode, SemanticModel>> codeSnippetQueue = 
+                new Queue<Tuple<SyntaxNode, SemanticModel>>();
 
             if (codeSnippet is TryStatementSyntax)
             {
                 codeSnippet = (codeSnippet as TryStatementSyntax).Block;
             }
+            codeSnippetQueue.Enqueue(new Tuple<SyntaxNode, SemanticModel>(codeSnippet, semanticModel));
             
+            while (codeSnippetQueue.Any())
+            {
+                Tuple<SyntaxNode, SemanticModel> snippetAndModel = codeSnippetQueue.Dequeue();
+                var snippet = snippetAndModel.Item1;
+                var model = snippetAndModel.Item2;
+                List<InvocationExpressionSyntax> methodList = GetInvokedMethodsInACodeSnippet(snippet);
+                
+                foreach (var invocation in methodList)
+                {
+                    String methodName = null;
+                    try
+                    {
+                        var symbolInfo = model.GetSymbolInfo(invocation);
+                        var symbol = symbolInfo.Symbol;
+                        methodName = IOFile.TokenizeMethodName(symbol.ToString());
+                        if (allInovkedMethods.ContainsKey(methodName))
+                        {
+                            allInovkedMethods[methodName]++;
+                        }
+                        else
+                        {
+                            allInovkedMethods.Add(methodName, 1);
+
+                            // find the method declaration (go to definition)
+                            if (methodName.IndexOf('.') != -1)
+                            {
+                                methodName = methodName.Split('.').Last();
+                            }
+                            var methodDeclarTupleList = treeAndModelDic.Keys//.AsParallel()
+                                .Select(
+                                delegate(SyntaxTree tree)
+                                {
+                                    var root = tree.GetRoot();
+                                    var methodDeclarList = root.DescendantNodes()
+                                        .OfType<MethodDeclarationSyntax>()
+                                        .Where(m => m.Identifier.ValueText == methodName)
+                                        .ToList();
+                                    var semanticmodel = treeAndModelDic[tree];
+                                    foreach (var mdeclar in methodDeclarList)
+                                    {
+                                        var methodSymbol = semanticmodel.GetDeclaredSymbol(mdeclar);
+                                        if (symbol.Equals(methodSymbol))
+                                        {
+                                            return new Tuple<SyntaxNode, SemanticModel>(
+                                                mdeclar, semanticmodel);
+                                        }
+                                    }
+                                    return null;
+                                });
+
+                            try
+                            {
+                                var methodDeclaration = methodDeclarTupleList.First(mdeclar => mdeclar != null);
+                                codeSnippetQueue.Enqueue(methodDeclaration);
+                            }
+                            catch { }
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Logger.Log(e);
+                        // no symbol info
+                        methodName = IOFile.TokenizeMethodName(invocation.ToString());
+                        MergeDic<String>(ref allInovkedMethods,
+                                new Dictionary<String, int>() { { methodName, 1 } });
+                    } 
+                }
+            }
+
+            return allInovkedMethods;
+        }
+
+        public static List<InvocationExpressionSyntax> GetInvokedMethodsInACodeSnippet(
+            SyntaxNode codeSnippet)
+        {
+            List<InvocationExpressionSyntax> methodList;
+
             bool hasTryStatement = true;
             try
             {
@@ -287,29 +369,9 @@ namespace CatchBlockExtraction
             {
                 methodList = codeSnippet.DescendantNodes().OfType<InvocationExpressionSyntax>().ToList();
             }
-            
-            foreach (var invocation in methodList)
-            {
-                //Console.WriteLine(invocation);
-                if (IsLoggingStatement(invocation))
-                    continue; // ignore the logging method
-                try
-                {
-                    var symbolInfo = model.GetSymbolInfo(invocation);
-                    var symbol = symbolInfo.Symbol;
-                    String methodName = IOFile.TokenizeMethodName(symbol.ToString());
-                    MergeDic<String>(ref methodNames,
-                            new Dictionary<String, int>() { { methodName, 1 } });
-                }
-                catch (Exception)
-                {
-                    // no symbol info
-                    MergeDic<String>(ref methodNames,
-                            new Dictionary<String, int>() { { invocation.ToString(), 1 } });
-                } 
 
-            }
-            return methodNames;
+            var updatedMethodList = methodList.Where(method => !IsLoggingStatement(method)).ToList();
+            return updatedMethodList;
         }
 
         public static void MergeDic<T>(ref Dictionary<T, int> dic1, Dictionary<T, int> dic2)

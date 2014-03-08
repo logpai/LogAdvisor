@@ -17,6 +17,25 @@ namespace CatchBlockExtraction
 {
     class CodeWalker
     {
+        public static List<MetadataReference> appReflist = new List<MetadataReference>();
+
+        public CodeWalker()
+        {        
+            var mscorlib = MetadataReference.CreateAssemblyReference("mscorlib");
+            appReflist.Add(mscorlib);
+
+            // Find all the application API dll references files
+            IEnumerable<String> appLibFiles = Directory.EnumerateFiles(IOFile.FolderPath,
+                "*.dll", SearchOption.AllDirectories);
+            foreach (var libFile in appLibFiles)
+            {   
+                // Add application API libs by new MetadataFileReference(libFile) 
+                var reference = new MetadataFileReference(libFile);
+                appReflist.Add(reference);
+            }
+
+        }
+
         public void LoadByInputMode(String inputMode, String filePath)
         {
             Logger.Log("Input mode: " + inputMode);
@@ -38,17 +57,22 @@ namespace CatchBlockExtraction
         public static void LoadByFolder(String folderPath)
         {
             Logger.Log("Loading from folder: " + folderPath);
-            IEnumerable<String> FileNames = Directory.EnumerateFiles(folderPath, "*.cs", 
+            IEnumerable<String> FileNames = Directory.EnumerateFiles(folderPath, "*.cs",
                 SearchOption.AllDirectories);
             int numFiles = FileNames.Count();
             Logger.Log("Loading " + numFiles + " *.cs files.");
             // parallelization
-            var treeList = FileNames.AsParallel()
+            var treeAndModelList = FileNames.AsParallel()
                 .Select(fileName => LoadSourceFile(fileName))
                 .ToList();
-            var compilation = BuildCompilation(treeList);
 
-            CodeAnalyzer.AnalyzeAllTrees(treeList, compilation);      
+            var treeAndModelDic = new Dictionary<SyntaxTree, SemanticModel>();
+            foreach (var treeAndModel in treeAndModelList)
+            {
+                treeAndModelDic.Add(treeAndModel.Item1, treeAndModel.Item2);
+            }
+
+            CodeAnalyzer.AnalyzeAllTrees(treeAndModelDic);
         }
 
         public static void LoadByTxtFile(String folderPath)
@@ -73,64 +97,42 @@ namespace CatchBlockExtraction
             }
 
             var tree = SyntaxTree.ParseText(content);
-            var treeList = new List<SyntaxTree>() { tree };
-            var compilation = BuildCompilation(treeList);
-            CodeAnalyzer.AnalyzeAllTrees(treeList, compilation);
+            var model = GetSemanticInfo(tree);
+            var treeAndModelDic = new Dictionary<SyntaxTree, SemanticModel>();
+            treeAndModelDic.Add(tree, model);
+            CodeAnalyzer.AnalyzeAllTrees(treeAndModelDic);
         }
 
-        public static SyntaxTree LoadSourceFile(String sourceFile)
+        public static Tuple<SyntaxTree, SemanticModel> LoadSourceFile(String sourceFile)
         {
             Logger.Log("Loading source file: " + sourceFile);
-//            if (InputFileName.Split('\\').Last().Contains("Log"))
-//            {
-//                fileContent = "";
-//            }
-            var tree = SyntaxTree.ParseFile(sourceFile);       
-            return tree;
+            //            if (InputFileName.Split('\\').Last().Contains("Log"))
+            //            {
+            //                fileContent = "";
+            //            }
+            var tree = SyntaxTree.ParseFile(sourceFile);
+            var model = GetSemanticInfo(tree);
+
+            return new Tuple<SyntaxTree, SemanticModel>(tree, model);
         }
 
-        public static Compilation BuildCompilation(List<SyntaxTree> treelist)
+        public static SemanticModel GetSemanticInfo(SyntaxTree tree)
         {
-            List<String> allLibNameList = new List<String>();
-            List<MetadataReference> reflist = new List<MetadataReference>();
-
-            // Add all the application API references
-            IEnumerable<String> appLibFiles = Directory.EnumerateFiles(IOFile.FolderPath,
-                "*.dll", SearchOption.AllDirectories);
-            foreach (var libfile in appLibFiles)
-            {
-                var libName = libfile.Split('\\').Last();
-                libName = libName.Substring(0, libName.LastIndexOf('.'));
-                if (allLibNameList.Contains(libName)) continue;
-                allLibNameList.Add(libName);
-                var reference = new MetadataFileReference(libfile);
-                reflist.Add(reference);
-                Logger.Log("Adding reference: " + libName + ".dll");
-            }
-
             // Collect the system API references from using directives
-            var totalUsingList = treelist.AsParallel().Select(
-                delegate(SyntaxTree tree)
-                {
-                    var root = tree.GetRoot();
-                    var usingList = root.DescendantNodes().OfType<UsingDirectiveSyntax>();
-                    var resultlist = usingList
-                        .Where(lib => !allLibNameList.Contains(lib.Name.ToString()))
-                        .Select(lib => lib.Name.ToString()).ToList();
-                    return resultlist;
-                });
-            // transfer to String list
-            List<String> libFullNameList = totalUsingList.SelectMany(x => x).ToList();
-            // create metareference                
-            foreach (var libFullName in libFullNameList)
+            List<MetadataReference> reflist = new List<MetadataReference>();
+            var root = tree.GetRoot();
+            var usingList = root.DescendantNodes().OfType<UsingDirectiveSyntax>();
+
+            List<String> allLibNames = new List<string>();
+            foreach (var usingLib in usingList)
             {
-                String libName = libFullName;
+                String libName = usingLib.Name.ToString();
                 MetadataReference reference = null;
                 while (libName != "" && reference == null)
                 {
-                    if (allLibNameList.Contains(libName)) break;
+                    if (allLibNames.Contains(libName)) break;
 
-                    allLibNameList.Add(libName);
+                    allLibNames.Add(libName);
 
                     try
                     {
@@ -146,7 +148,7 @@ namespace CatchBlockExtraction
                             libName = "";
                             break;
                         }
-                        libName = libName.Substring(0, idx);
+                        libName = libName.Substring(0, idx);                     
                     }
                 }
 
@@ -157,12 +159,15 @@ namespace CatchBlockExtraction
                 }
             }
 
+            reflist.AddRange(appReflist);
             var compilation = Compilation.Create(
-                outputName: "AllCompilation",
-                syntaxTrees: treelist,
+                outputName: "ACompilation",
+                syntaxTrees: new[] { tree },
                 references: reflist);
 
-            return compilation;
+            var model = compilation.GetSemanticModel(tree);
+
+            return model;
         }
 
     }
