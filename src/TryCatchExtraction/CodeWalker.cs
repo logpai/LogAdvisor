@@ -45,7 +45,7 @@ namespace CatchBlockExtraction
                     LoadByFolder(filePath);
                     break;
                 case "ByTxtFile":
-                    LoadByTxtFile(filePath);
+                    //LoadByTxtFile(filePath);
                     break;
                 default:
                     Logger.Log("Invalid input mode. (Select ByFolder/ByTxtFile)");
@@ -71,10 +71,11 @@ namespace CatchBlockExtraction
             {
                 treeAndModelDic.Add(treeAndModel.Item1, treeAndModel.Item2);
             }
+            var compilation = BuildCompilation(treeAndModelDic.Keys.ToList());
 
-            CodeAnalyzer.AnalyzeAllTrees(treeAndModelDic);
+            CodeAnalyzer.AnalyzeAllTrees(treeAndModelDic, compilation);
         }
-
+/*
         public static void LoadByTxtFile(String folderPath)
         {
             String txtFilePath = IOFile.CompleteFileName("AllSource.txt");
@@ -102,7 +103,7 @@ namespace CatchBlockExtraction
             treeAndModelDic.Add(tree, model);
             CodeAnalyzer.AnalyzeAllTrees(treeAndModelDic);
         }
-
+*/
         public static Tuple<SyntaxTree, SemanticModel> LoadSourceFile(String sourceFile)
         {
             Logger.Log("Loading source file: " + sourceFile);
@@ -160,14 +161,73 @@ namespace CatchBlockExtraction
             }
 
             reflist.AddRange(appReflist);
+            var compilationOptions = new CompilationOptions(outputKind: OutputKind.WindowsApplication);
             var compilation = Compilation.Create(
                 outputName: "ACompilation",
+                options: compilationOptions,
                 syntaxTrees: new[] { tree },
                 references: reflist);
 
             var model = compilation.GetSemanticModel(tree);
 
             return model;
+        }
+
+        public static Compilation BuildCompilation(List<SyntaxTree> treelist)
+        {
+            List<MetadataReference> reflist = new List<MetadataReference>();
+
+            // Collect the system API references from using directives
+            var totalUsings = treelist.AsParallel().Select(
+                    tree => tree.GetRoot().DescendantNodes().OfType<UsingDirectiveSyntax>());
+            // transfer to a list
+            var totalUsingList = totalUsings.SelectMany(x => x).ToList();
+            // create metareference  
+            List<String> allLibNames = new List<string>();
+            foreach (var usingLib in totalUsingList)
+            {
+                String libName = usingLib.Name.ToString();
+                MetadataReference reference = null;
+                while (libName != "" && reference == null)
+                {
+                    if (allLibNames.Contains(libName)) break;
+
+                    allLibNames.Add(libName);  
+
+                    try
+                    {
+                        // Add system API libs by MetadataReference.CreateAssemblyReference
+                        reference = MetadataReference.CreateAssemblyReference(libName);
+                    }
+                    catch (Exception)
+                    {
+                        // handle cases that "libName.dll" does not exist
+                        int idx = libName.LastIndexOf('.');
+                        if (idx == -1)
+                        {
+                            libName = "";
+                            break;
+                        }
+                        libName = libName.Substring(0, idx);
+                    }
+                }
+
+                if (reference != null)
+                {
+                    Logger.Log("Adding reference: " + libName + ".dll");
+                    reflist.Add(reference);
+                }
+            }
+
+            reflist.AddRange(appReflist);
+            var compilationOptions = new CompilationOptions(outputKind: OutputKind.WindowsApplication);
+            var compilation = Compilation.Create(
+                outputName: "AllCompilation",
+                options: compilationOptions,
+                syntaxTrees: treelist,
+                references: reflist);
+
+            return compilation;
         }
 
     }
@@ -179,10 +239,26 @@ namespace CatchBlockExtraction
     {
         public override SyntaxNode VisitTryStatement(TryStatementSyntax node)
         {
-            //SyntaxNode updatedNode = base.VisitTryStatement(node);
+            // rewrite to null
             return null;
         }
     }
+
+    class TryStatementSkipper : SyntaxWalker
+    {
+        public readonly List<InvocationExpressionSyntax> invokedMethods = new List<InvocationExpressionSyntax>();
+
+        public override void VisitTryStatement(TryStatementSyntax node)
+        {
+            // skip over
+        }
+
+        public override void VisitInvocationExpression(InvocationExpressionSyntax node)
+        {
+            this.invokedMethods.Add(node);
+        }
+    }
+
 }
 
 

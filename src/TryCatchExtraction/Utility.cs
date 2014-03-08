@@ -39,6 +39,8 @@ namespace CatchBlockExtraction
         }
         public static void Log(Exception e)
         {
+            Console.WriteLine("[{0}]", DateTime.Now.ToString());
+            LogWriter.WriteLine("[{0}]", DateTime.Now.ToString());
             Console.WriteLine(e);
             LogWriter.WriteLine(e);
             LogWriter.Flush();

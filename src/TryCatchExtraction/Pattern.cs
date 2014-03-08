@@ -82,21 +82,22 @@ namespace CatchBlockExtraction
     class CommonFeature
     {
         public Dictionary<String, int> BoolFeatures;
-        public Dictionary<String, int> TextFeatures;
-        public Dictionary<String, String> Notes;
+        public Dictionary<String, int> MethodFeatures;
+        public Dictionary<String, int> VariableFeatures;
+        public Dictionary<String, String> MetaInfo;
         public const String Splitter = "\t";
 
         public CommonFeature()
         {
             BoolFeatures = new Dictionary<String, int>();
-            Notes = new Dictionary<String, String>();
+            MetaInfo = new Dictionary<String, String>();
             BoolFeatures.Add("Logged", 0);
             BoolFeatures.Add("Thrown", 0);
-            Notes.Add("Thrown", "");
+            MetaInfo.Add("Thrown", null);
             BoolFeatures.Add("SetLogicFlag", 0);
-            Notes.Add("SetLogicFlag", "");
+            MetaInfo.Add("SetLogicFlag", null);
             BoolFeatures.Add("Return", 0);
-            Notes.Add("Return", "");
+            MetaInfo.Add("Return", null);
         }
 
     }
@@ -109,7 +110,9 @@ namespace CatchBlockExtraction
         {
             BoolFeatures.Add("EmptyBlock", 0);
             BoolFeatures.Add("RecoverFlag", 0);
-            BoolFeatures.Add("HasCriticalOperation", 0);
+            MetaInfo.Add("RecoverFlag", null);
+            BoolFeatures.Add("OtherOperation", 0);
+            MetaInfo.Add("OtherOperation", null);
         }
 
         public String PrintFeatures() 
@@ -120,9 +123,9 @@ namespace CatchBlockExtraction
                 features += (key + ":" + BoolFeatures[key] + Splitter);
             }
             features += (ExceptionType + Splitter);
-            foreach (var key in TextFeatures.Keys)
+            foreach (var key in MethodFeatures.Keys)
             {
-                features += (key + ":" + TextFeatures[key] + Splitter);
+                features += (key + ":" + MethodFeatures[key] + Splitter);
             }
             return features;
         }
