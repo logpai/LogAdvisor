@@ -21,17 +21,16 @@ namespace CatchBlockExtraction
         /// </summary>
         /// <param name="treeList"></param>
         /// <param name="compilation"></param>
-        public static void AnalyzeAllTrees(Dictionary<SyntaxTree, SemanticModel> treeAndModelDic)
+        public static void AnalyzeAllTrees(List<SyntaxTree> treeList, Compilation compilation)
         {
             // statistics
-            int numFiles = treeAndModelDic.Count;
-            var treeNode = treeAndModelDic.Keys
-                .Select(tree => tree.GetRoot().DescendantNodes().Count());
+            int numFiles = treeList.Count;
+            var treeNode = treeList.Select(tree => tree.GetRoot().DescendantNodes().Count());
             Logger.Log("Num of syntax nodes: " + treeNode.Sum());
             Logger.Log("Num of source files: " + numFiles);
             // analyze every tree simultaneously
-            var codeStatsList = treeAndModelDic.Keys.AsParallel()
-                .Select(tree => CodeAnalyzer.AnalyzeATree(tree, treeAndModelDic)).ToList();
+            var codeStatsList = treeList.AsParallel()
+                .Select(tree => CodeAnalyzer.AnalyzeATree(tree, compilation)).ToList();
 
             CodeStatistics allStats = new CodeStatistics(codeStatsList);
 
@@ -39,7 +38,7 @@ namespace CatchBlockExtraction
             allStats.PrintSatistics();
 
             // Save all the source code into a txt file
-            var sb = new StringBuilder(treeAndModelDic.Keys.First().Length * numFiles); //initial length
+            var sb = new StringBuilder(treeList.First().Length * numFiles); //initial length
             foreach (var stat in codeStatsList)
             {
                 sb.Append(stat.Item1.GetText());
@@ -58,11 +57,11 @@ namespace CatchBlockExtraction
         /// <param name="compilation"></param>
         /// <returns></returns>
         public static Tuple<SyntaxTree, TreeStatistics> AnalyzeATree(SyntaxTree tree, 
-            Dictionary<SyntaxTree, SemanticModel> treeAndModelDic)
+            Compilation compilation)
         {
             TreeStatistics stats = new TreeStatistics();
             var root = tree.GetRoot();
-            var model = treeAndModelDic[tree];
+            var model = compilation.GetSemanticModel(tree);
 
             // Num of LOC
             stats.CodeStats["NumLOC"] = tree.GetText().LineCount;
@@ -139,46 +138,22 @@ namespace CatchBlockExtraction
                         }
                     }
 
-                    // Num of logged catch blocks
-                    if (numCatchBlock > 0)
-                    {
-                        try
-                        {
-                            var catchBlock = logging.Ancestors().OfType<CatchClauseSyntax>().First();
-                            MergeDic<CatchClauseSyntax>(ref loggedCatchBlocks,
-                                new Dictionary<CatchClauseSyntax, int>() { { catchBlock, 1 } });
-                        }
-                        catch (Exception)
-                        {
-                            // ignore.
-                        }                        
-                    }
                 }
 
                 stats.CodeStats["NumLoggedClass"] = loggedClasses.Count;
                 stats.CodeStats["NumLoggedMethod"] = loggedMethods.Count;
-                stats.CodeStats["NumLoggedCatchBlock"] = loggedCatchBlocks.Count;
             }
 
-            // Num of exception types
-            Dictionary<String, int> exceptionTypeDic = new Dictionary<String, int>();
-            foreach (var catchblock in catchList)
-            {
-                var exceptionType = GetExceptionType(catchblock, model);
-                MergeDic<String>(ref exceptionTypeDic,
-                    new Dictionary<String, int>() { { exceptionType, 1 } });
-            }
-            stats.ExceptionTypeDic = exceptionTypeDic;
-
+            // Statistics and features of catch blocks
             List<CatchBlock> catchStatsList = catchList.AsParallel()
-                .Select(catchblock => AnalyzeACatchBlock(catchblock, model, treeAndModelDic)).ToList();
+                .Select(catchblock => AnalyzeACatchBlock(catchblock, model, compilation)).ToList();
             stats.CatchList = catchStatsList;
 
             return new Tuple<SyntaxTree, TreeStatistics>(tree, stats);
         }
 
         public static CatchBlock AnalyzeACatchBlock(CatchClauseSyntax catchblock, SemanticModel model,
-            Dictionary<SyntaxTree, SemanticModel> treeAndModelDic)
+            Compilation compilation)
         {
             CatchBlock catchBlockInfo = new CatchBlock();
             catchBlockInfo.ExceptionType = GetExceptionType(catchblock, model);
@@ -353,6 +328,9 @@ namespace CatchBlockExtraction
                 }
             }
         }
+
+
+
 
 
 

@@ -14,7 +14,6 @@ namespace CatchBlockExtraction
     class TreeStatistics
     {
         public Dictionary<String, int> CodeStats;
-        public Dictionary<String, int> ExceptionTypeDic;
         public List<CatchBlock> CatchList;
 
         public TreeStatistics()
@@ -61,18 +60,17 @@ namespace CatchBlockExtraction
             TreeStats = treestats;
             CatchBlocks = new CatchDic();
             CodeStats = new Dictionary<String, int>();
-            ExceptionTypeDic = new Dictionary<String, int>();
             foreach (var treetuple in treestats)
             {
                 CatchBlocks.Add(treetuple.Item2.CatchList);
-                CodeAnalyzer.MergeDic<String>(ref CodeStats, treetuple.Item2.CodeStats);
-                CodeAnalyzer.MergeDic<String>(ref ExceptionTypeDic, treetuple.Item2.ExceptionTypeDic);
+                CodeAnalyzer.MergeDic<String>(ref CodeStats, treetuple.Item2.CodeStats);               
             }
+            CodeStats["NumExceptionType"] = CatchBlocks.Count;
+            CodeStats["NumLoggedCatchBlock"] = CatchBlocks.NumLogged;
         }
 
         public void PrintSatistics()
-        {
-            CodeStats["NumExceptionType"] = ExceptionTypeDic.Count;
+        {           
             foreach (var stat in CodeStats.Keys)
             {
                 Logger.Log(stat + ": " + CodeStats[stat]);
