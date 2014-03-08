@@ -53,7 +53,7 @@ namespace CatchBlockExtraction
 
         public static void LoadByTxtFile(String folderPath)
         {
-            String txtFilePath = IOFileProcessing.CompleteFileName("AllSource.txt");
+            String txtFilePath = IOFile.CompleteFileName("AllSource.txt");
             Logger.Log("Load from txt file: " + txtFilePath);
 
             String content = "";
@@ -95,7 +95,7 @@ namespace CatchBlockExtraction
             List<MetadataReference> reflist = new List<MetadataReference>();
 
             // Add all the application API references
-            IEnumerable<String> appLibFiles = Directory.EnumerateFiles(IOFileProcessing.FolderPath,
+            IEnumerable<String> appLibFiles = Directory.EnumerateFiles(IOFile.FolderPath,
                 "*.dll", SearchOption.AllDirectories);
             foreach (var libfile in appLibFiles)
             {

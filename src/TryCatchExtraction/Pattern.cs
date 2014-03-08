@@ -75,7 +75,7 @@ namespace CatchBlockExtraction
             {
                 Logger.Log(stat + ": " + CodeStats[stat]);
             }
-            CatchBlocks.PrintToFile(IOFileProcessing.CompleteFileName("CatchBlock.txt"));
+            CatchBlocks.PrintToFile(IOFile.CompleteFileName("CatchBlock.txt"));
         }
     }
 
@@ -119,7 +119,7 @@ namespace CatchBlockExtraction
             {
                 features += (key + ":" + BoolFeatures[key] + Splitter);
             }
-            features += ExceptionType;
+            features += (ExceptionType + Splitter);
             foreach (var key in TextFeatures.Keys)
             {
                 features += (key + ":" + TextFeatures[key] + Splitter);

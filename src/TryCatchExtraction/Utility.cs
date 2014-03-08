@@ -20,7 +20,7 @@ namespace CatchBlockExtraction
         static StreamWriter LogWriter;
         public static void Initialize()
         {
-            LogFileName = IOFileProcessing.CompleteFileName(
+            LogFileName = IOFile.CompleteFileName(
                 DateTime.Today.Date.ToShortDateString().Replace("/", "") + ".log");
             LogWriter = File.AppendText(LogFileName);
             Log("-------------------------------------------------------");
@@ -96,32 +96,33 @@ namespace CatchBlockExtraction
     /// <summary>
     /// File name processing
     /// </summary>
-    static class IOFileProcessing
+    static class IOFile
     {
-        private static String _KeyName;
-
-        public static String FolderPath
+        public static String FolderPath;
+       
+        public static String CompleteFileName(String tail)
         {
-            get
-            {
-                return _KeyName;
-            }
-            set
-            {
-                _KeyName = value;
-            }
-        }
-        
-        public static String CompleteFileName(String Tail)
-        {
-            return (_KeyName + "\\" + _KeyName.Split('\\').Last() + "_" + Tail);
+            return (FolderPath + "\\" + FolderPath.Split('\\').Last() + "_" + tail);
         }
 
-        static public String DeleteSpace(String s)
+        static public String DeleteSpace(String str)
         {
-            return s.Replace("\n", "").Replace("\r", "").Replace("\t", "")
+            return str.Replace("\n", "").Replace("\r", "").Replace("\t", "")
                 .Replace("    ", " ").Replace("    ", " ").Replace("   ", " ")
                 .Replace("  ", " ");
+        }
+
+        static public String TokenizeMethodName(String str)
+        {
+            try
+            {
+                String methodName = str.Split('(').First();
+                return methodName;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 

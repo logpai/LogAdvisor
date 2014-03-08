@@ -20,14 +20,14 @@ namespace CatchBlockExtraction
             {
                 filePath = filePath.Remove(filePath.LastIndexOf('\\'));
             }
-            IOFileProcessing.FolderPath = filePath;
+            IOFile.FolderPath = filePath;
             
             Logger.Initialize();
             DateTime StartTime = DateTime.Now;          
             FolderFileInfo = new FolderInfo();
             FolderInfo.InputMode = inputMode;
            
-            Config.Load(IOFileProcessing.CompleteFileName("Config.txt"));
+            Config.Load(IOFile.CompleteFileName("Config.txt"));
 
             // traverse all the code folder for pattern check
             CodeWalker walker = new CodeWalker();

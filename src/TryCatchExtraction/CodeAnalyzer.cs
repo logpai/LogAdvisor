@@ -43,7 +43,7 @@ namespace CatchBlockExtraction
             {
                 sb.Append(stat.Item1.GetText());
             }
-            String txtFilePath = IOFileProcessing.CompleteFileName("AllSource.txt");
+            String txtFilePath = IOFile.CompleteFileName("AllSource.txt");
             using (StreamWriter sw = new StreamWriter(txtFilePath))
             {
                 sw.Write(sb.ToString());
@@ -163,7 +163,7 @@ namespace CatchBlockExtraction
             }
 
             var tryBlock = catchblock.Parent as TryStatementSyntax;
-            catchBlockInfo.TextFeatures = GetMethodNames(tryBlock, model);
+            catchBlockInfo.TextFeatures = GetInvokedMethodNames(tryBlock, model);
 
             return catchBlockInfo;
         }
@@ -176,10 +176,8 @@ namespace CatchBlockExtraction
         /// <returns></returns>
         static public bool IsLoggingStatement(SyntaxNode statement)
         {
-            if (statement.ToString().IndexOf('(') == -1)
-                return false;
-
-            String logging = statement.ToString().Split('(').First();
+            String logging = IOFile.TokenizeMethodName(statement.ToString());
+            if (logging == null) return false;
 
             foreach (String notlogmethod in Config.NotLogMethods)
             {
@@ -254,7 +252,7 @@ namespace CatchBlockExtraction
             }
         }
 
-        public static Dictionary<String, int> GetMethodNames(SyntaxNode codeSnippet, SemanticModel model)
+        public static Dictionary<String, int> GetInvokedMethodNames(SyntaxNode codeSnippet, SemanticModel model)
         {
             Dictionary<String, int> methodNames = new Dictionary<String, int>();
             List<InvocationExpressionSyntax> methodList;
@@ -299,9 +297,9 @@ namespace CatchBlockExtraction
                 {
                     var symbolInfo = model.GetSymbolInfo(invocation);
                     var symbol = symbolInfo.Symbol;
-                    String methodName = symbol.ToString();
+                    String methodName = IOFile.TokenizeMethodName(symbol.ToString());
                     MergeDic<String>(ref methodNames,
-                                new Dictionary<String, int>() { { methodName, 1 } });
+                            new Dictionary<String, int>() { { methodName, 1 } });
                 }
                 catch (Exception)
                 {
