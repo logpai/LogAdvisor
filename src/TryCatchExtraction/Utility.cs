@@ -127,7 +127,7 @@ namespace CatchBlockExtraction
                 String methodName = str;
                 try
                 {
-                    methodName = Regex.Replace(methodName, "(.*)", "");
+                    methodName = Regex.Replace(methodName, "\\(.*\\)", "");
                     methodName = Regex.Replace(methodName, "<.*>", "");
                 }
                 catch { }
