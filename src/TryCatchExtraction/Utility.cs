@@ -124,9 +124,10 @@ namespace CatchBlockExtraction
         {
             try
             {
-                String methodName = str.Split('(').First();
+                String methodName = str;
                 try
                 {
+                    methodName = Regex.Replace(methodName, "(.*)", "");
                     methodName = Regex.Replace(methodName, "<.*>", "");
                 }
                 catch { }

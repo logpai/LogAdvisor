@@ -128,12 +128,12 @@ namespace CatchBlockExtraction
             String features = null;
             foreach (var key in OperationFeatures.Keys)
             {
-                features += (key + ":" + OperationFeatures[key] + Splitter);
+                features += (IOFile.DeleteSpace(key) + ":" + OperationFeatures[key] + Splitter);
             }
             features += (ExceptionType + Splitter);
             foreach (var key in TextFeatures.Keys)
             {
-                features += (key + ":" + TextFeatures[key] + Splitter);
+                features += (IOFile.DeleteSpace(key) + ":" + TextFeatures[key] + Splitter);
             }
             return features;
         }

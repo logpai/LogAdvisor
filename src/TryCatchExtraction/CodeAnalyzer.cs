@@ -423,8 +423,7 @@ namespace CatchBlockExtraction
                 methodList = codeSnippet.DescendantNodes().OfType<InvocationExpressionSyntax>().ToList();
             }
 
-            var updatedMethodList = methodList.Where(method => !IsLoggingStatement(method)).ToList();
-            return updatedMethodList;
+            return methodList;
         }
 
         public static Dictionary<String, int> GetVariablesAndComments(SyntaxNode codeSnippet)
