@@ -109,9 +109,15 @@ namespace CatchBlockExtraction
 
         static public String DeleteSpace(String str)
         {
-            return str.Replace("\n", "").Replace("\r", "").Replace("\t", "")
+            String updatedStr = str;
+            try
+            {
+                updatedStr = str.Replace("\n", "").Replace("\r", "").Replace("\t", "")
                 .Replace("    ", " ").Replace("    ", " ").Replace("   ", " ")
                 .Replace("  ", " ");
+            }
+            catch {}
+            return updatedStr;
         }
 
         static public String TokenizeMethodName(String str)
@@ -119,80 +125,17 @@ namespace CatchBlockExtraction
             try
             {
                 String methodName = str.Split('(').First();
+                try
+                {
+                    methodName = Regex.Replace(methodName, "<.*>", "");
+                }
+                catch { }
                 return methodName;
             }
             catch
             {
                 return null;
             }
-        }
-    }
-
-    /// <summary>
-    /// Set up the FileInfo class, with source file name and line number
-    /// </summary>
-    class FileInfo // While Inputing By Folder, To Recognize Line Number in Original Source Files
-    {
-        public String FileName;
-        public int Lines;
-
-        public FileInfo(String fileName, int totalLines)
-        {
-            FileName = fileName;
-            Lines = totalLines;
-        }
-    }
-
-    class FolderInfo : List<FileInfo>
-    {
-        public static /*readonly*/ String InputMode;
-
-        public String GetFileNameAndLine(SyntaxNode node)
-        {
-            String ID;
-            int Line = node.SyntaxTree.GetLineSpan(node.Span, false).StartLinePosition.Line + 1; //0-base to 1-base
-            if (InputMode == "ByFolder")
-            {
-                FileInfo realPos = FindFile(Line);
-                ID = realPos.FileName + ":" + realPos.Lines.ToString();
-            }
-            else
-            {
-                ID = node.SyntaxTree.FilePath + ":" + Line.ToString();
-            }
-            return ID;
-        }
-
-        public String GetFileName(SyntaxNode node)
-        {
-            String filename;
-            int Line = node.SyntaxTree.GetLineSpan(node.Span, false).StartLinePosition.Line + 1; //0-base to 1-base
-            if (InputMode == "ByFolder")
-            {
-                FileInfo realPos = FindFile(Line);
-                filename = realPos.FileName;
-            }
-            else
-            {
-                filename = node.SyntaxTree.FilePath;
-            }
-            return filename;
-        }
-
-        private FileInfo FindFile(int MixedFileLineNumber)
-        {
-            foreach (FileInfo file in this)
-            {
-                if (MixedFileLineNumber > file.Lines)
-                {
-                    MixedFileLineNumber -= file.Lines;
-                }
-                else
-                {
-                    return new FileInfo(file.FileName, MixedFileLineNumber);
-                }
-            }
-            return null;
         }
     }
 

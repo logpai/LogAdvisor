@@ -147,20 +147,26 @@ namespace CatchBlockExtraction
 
             // Statistics and features of catch blocks
             stats.CatchList = catchList
-                .Select(catchblock => AnalyzeACatchBlock(catchblock, tree, treeAndModelDic,
+                .Select(catchblock => AnalyzeACatchBlock(catchblock, treeAndModelDic,
                 compilation)).ToList();
 
             return new Tuple<SyntaxTree, TreeStatistics>(tree, stats);
         }
 
-        public static CatchBlock AnalyzeACatchBlock(CatchClauseSyntax catchblock, SyntaxTree tree, 
+        public static CatchBlock AnalyzeACatchBlock(CatchClauseSyntax catchblock,
                 Dictionary<SyntaxTree, SemanticModel> treeAndModelDic, Compilation compilation)
         {
             CatchBlock catchBlockInfo = new CatchBlock();
+            var tree = catchblock.SyntaxTree;
             var model = treeAndModelDic[tree];
             catchBlockInfo.ExceptionType = GetExceptionType(catchblock, model);
 
-            //SyntaxNode
+            var fileLinePositionSpan = tree.GetLineSpan(catchblock.Span, false);
+            var startLine = fileLinePositionSpan.StartLinePosition.Line + 1;
+            var endLine = fileLinePositionSpan.EndLinePosition.Line + 1;
+            catchBlockInfo.OperationFeatures["LOC"] = endLine - startLine;
+            catchBlockInfo.MetaInfo["Line"] = startLine.ToString();
+            catchBlockInfo.MetaInfo["FilePath"] = tree.FilePath;
 
             bool hasTryStatement = catchblock.DescendantNodesAndSelf()
                       .OfType<TryStatementSyntax>().Any();
@@ -170,7 +176,15 @@ namespace CatchBlockExtraction
                 // remove try-catch-finally block inside
                 updatedCatchBlock = tryblockremover.Visit(catchblock);
             }
-            catchBlockInfo.OperationFeatures["Logged"] = (FindLoggingIn(updatedCatchBlock) != null) ? 1 : 0;
+
+            catchBlockInfo.MetaInfo["CatchBlock"] = catchblock.ToString();
+
+            var loggingStatement = FindLoggingIn(updatedCatchBlock);
+            if (loggingStatement != null)
+            {
+                catchBlockInfo.MetaInfo["Logged"] = loggingStatement.ToString();
+                catchBlockInfo.OperationFeatures["Logged"] = 1;
+            }
 
             var throwStatement = FindThrowIn(updatedCatchBlock);
             if (throwStatement != null)
@@ -213,19 +227,18 @@ namespace CatchBlockExtraction
             }
             
             var tryBlock = catchblock.Parent as TryStatementSyntax;
-            catchBlockInfo.VariableFeatures = GetVariablesAndComments(tryBlock);
-            catchBlockInfo.TextFeatures = GetAllInvokedMethodNamesByBFS(tryBlock, tree, 
-                treeAndModelDic, compilation);
-
+            var variableAndComments = GetVariablesAndComments(tryBlock.Block);
+            var methodNameList = GetAllInvokedMethodNamesByBFS(tryBlock.Block, treeAndModelDic, compilation);
+            catchBlockInfo.OperationFeatures["NumMethod"] = methodNameList.Count;
+            catchBlockInfo.TextFeatures = methodNameList;
+            MergeDic<String>(ref catchBlockInfo.TextFeatures, variableAndComments);
+            
             return catchBlockInfo;
         }
 
         /// <summary>
         /// To check whether an invocation is a logging statement
         /// </summary>
-        /// <param name="statement">The node to be checked: StatementSyntax or 
-        /// InvocationExpressionSyntax</param>
-        /// <returns></returns>
         static public bool IsLoggingStatement(SyntaxNode statement)
         {
             String logging = IOFile.TokenizeMethodName(statement.ToString());
@@ -288,26 +301,20 @@ namespace CatchBlockExtraction
         }
 
         public static Dictionary<String, int> GetAllInvokedMethodNamesByBFS(SyntaxNode inputSnippet, 
-            SyntaxTree syntaxtree, Dictionary<SyntaxTree, SemanticModel> treeAndModelDic, 
-            Compilation compilation)
+            Dictionary<SyntaxTree, SemanticModel> treeAndModelDic, Compilation compilation)
         {
-            Dictionary<String, int> allInovkedMethods = new Dictionary<String, int>();            
-            Queue<Tuple<SyntaxNode, SyntaxTree>> codeSnippetQueue = 
-                new Queue<Tuple<SyntaxNode, SyntaxTree>>();
+            Dictionary<String, int> allInovkedMethods = new Dictionary<String, int>();
+            // to save a code snippet and its backward level
+            Queue<Tuple<SyntaxNode, int>> codeSnippetQueue = new Queue<Tuple<SyntaxNode, int>>();
 
-            if (inputSnippet is TryStatementSyntax)
-            {
-                inputSnippet = (inputSnippet as TryStatementSyntax).Block;
-            }
-            codeSnippetQueue.Enqueue(new Tuple<SyntaxNode, SyntaxTree>(inputSnippet, syntaxtree));
+            codeSnippetQueue.Enqueue(new Tuple<SyntaxNode, int>(inputSnippet, 0));
             
             while (codeSnippetQueue.Any())
             {
-                if (allInovkedMethods.Count > 20) break; // only save 20 method names
-
-                Tuple<SyntaxNode, SyntaxTree> snippetAndTree = codeSnippetQueue.Dequeue();
-                var snippet = snippetAndTree.Item1;
-                var tree = snippetAndTree.Item2;
+                Tuple<SyntaxNode, int> snippetAndLevel = codeSnippetQueue.Dequeue();
+                var level = snippetAndLevel.Item2;
+                var snippet = snippetAndLevel.Item1;
+                var tree = snippet.SyntaxTree;
                 List<InvocationExpressionSyntax> methodList = GetInvokedMethodsInACodeSnippet(snippet);
                 
                 foreach (var invocation in methodList)
@@ -337,6 +344,7 @@ namespace CatchBlockExtraction
                         else
                         {
                             allInovkedMethods.Add(methodName, 1);
+                            if (level >= 3) continue; // only go backward to 3 levels
                             if (symbol == null || methodName.StartsWith("System")) continue; // System API
                             if (methodName.IndexOf('.') != -1)
                             {
@@ -367,8 +375,7 @@ namespace CatchBlockExtraction
                                         }
                                         if (symbol.ToString() == methodSymbol.ToString())
                                         {
-                                            return new Tuple<SyntaxNode, SyntaxTree>(
-                                                mdeclar, searchtree);
+                                            return new Tuple<SyntaxNode, int>(mdeclar, level + 1);
                                         }
                                     }
                                     return null;
@@ -423,6 +430,31 @@ namespace CatchBlockExtraction
         public static Dictionary<String, int> GetVariablesAndComments(SyntaxNode codeSnippet)
         {
             Dictionary<String, int> variableAndComments = new Dictionary<String, int>();
+
+            bool hasTryStatement = codeSnippet.DescendantNodes()
+                .OfType<TryStatementSyntax>().Any();
+            if (hasTryStatement == true)
+            {
+                codeSnippet = tryblockremover.Visit(codeSnippet);
+            }
+
+            var variableList = codeSnippet.DescendantNodes().OfType<IdentifierNameSyntax>()
+                .Where(variable => !variable.IsInTypeOnlyContext());
+            foreach (var variable in variableList)
+            {
+                MergeDic<String>(ref variableAndComments,
+                    new Dictionary<String, int>() { { variable.ToString(), 1 } });
+            }
+
+            var commentList = codeSnippet.DescendantTrivia()
+                .Where(childNode => childNode.Kind == SyntaxKind.SingleLineCommentTrivia 
+                    || childNode.Kind == SyntaxKind.MultiLineCommentTrivia);
+            foreach (var comment in commentList)
+            {
+                String updatedComment = IOFile.DeleteSpace(comment.ToString());
+                MergeDic<String>(ref variableAndComments,
+                    new Dictionary<String, int>() { { updatedComment, 1 } });
+            }
             return variableAndComments;
         }
 
@@ -609,55 +641,5 @@ namespace CatchBlockExtraction
             return isEmpty;
         }
 
-
-
-
-
-
-
-
-
- 
-
-
-
-
-
-
-        static public List<String> FindVariablesIn(SyntaxNode PieceOfCode, SemanticModel semanticModel, 
-            out List<Symbol> Symbols)
-        {
-            var AllPossibleVariables = PieceOfCode.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>();
-            var VariablesList = new List<string>(); // To Return
-            Symbols = new List<Symbol>();
-            foreach (IdentifierNameSyntax variable in AllPossibleVariables)
-            {
-                try
-                {
-                    if (!variable.IsInTypeOnlyContext())
-                    {
-                        ExpressionSyntax RealVariable = variable as ExpressionSyntax;
-                        if (variable.Parent is MemberAccessExpressionSyntax)
-                        {
-                            RealVariable = variable.Parent as ExpressionSyntax;
-                            // Remove Duplicate  AAAA.BBBB will enter here twice, for AAAA and BBBB seperately
-                            if (variable == (RealVariable as MemberAccessExpressionSyntax).Expression)
-                            {
-                                continue;
-                            }
-                        }
-                        VariablesList.Add(RealVariable.ToString());
-                        var symbol = semanticModel.GetSymbolInfo(RealVariable).Symbol;
-                        if (symbol != null)
-                            Symbols.Add(symbol);
-                    }
-                }
-                catch { }
-            }
-            return VariablesList;
-        }
-
-
     }
-
 }

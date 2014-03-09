@@ -10,8 +10,6 @@ namespace CatchBlockExtraction
 {
     class Program
     {
-        public static FolderInfo FolderFileInfo;
-
         static void Main(string[] args)
         {
             String inputMode = args[0];
@@ -24,8 +22,6 @@ namespace CatchBlockExtraction
             
             Logger.Initialize();
             DateTime StartTime = DateTime.Now;          
-            FolderFileInfo = new FolderInfo();
-            FolderInfo.InputMode = inputMode;
            
             Config.Load(IOFile.CompleteFileName("Config.txt"));
 
