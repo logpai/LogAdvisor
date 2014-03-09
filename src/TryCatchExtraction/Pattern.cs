@@ -81,23 +81,26 @@ namespace CatchBlockExtraction
 
     class CommonFeature
     {
-        public Dictionary<String, int> BoolFeatures;
-        public Dictionary<String, int> MethodFeatures;
+        public Dictionary<String, int> OperationFeatures;
+        public Dictionary<String, int> TextFeatures;
         public Dictionary<String, int> VariableFeatures;
         public Dictionary<String, String> MetaInfo;
+
         public const String Splitter = "\t";
 
         public CommonFeature()
         {
-            BoolFeatures = new Dictionary<String, int>();
+            OperationFeatures = new Dictionary<String, int>();
             MetaInfo = new Dictionary<String, String>();
-            BoolFeatures.Add("Logged", 0);
-            BoolFeatures.Add("Thrown", 0);
+            OperationFeatures.Add("Logged", 0);
+            OperationFeatures.Add("Thrown", 0);
             MetaInfo.Add("Thrown", null);
-            BoolFeatures.Add("SetLogicFlag", 0);
+            OperationFeatures.Add("SetLogicFlag", 0);
             MetaInfo.Add("SetLogicFlag", null);
-            BoolFeatures.Add("Return", 0);
+            OperationFeatures.Add("Return", 0);
             MetaInfo.Add("Return", null);
+            OperationFeatures.Add("LOC", 0);
+            OperationFeatures.Add("NumMethod", 0);
         }
 
     }
@@ -108,24 +111,24 @@ namespace CatchBlockExtraction
 
         public CatchBlock() : base() 
         {
-            BoolFeatures.Add("EmptyBlock", 0);
-            BoolFeatures.Add("RecoverFlag", 0);
+            OperationFeatures.Add("EmptyBlock", 0);
+            OperationFeatures.Add("RecoverFlag", 0);
             MetaInfo.Add("RecoverFlag", null);
-            BoolFeatures.Add("OtherOperation", 0);
+            OperationFeatures.Add("OtherOperation", 0);
             MetaInfo.Add("OtherOperation", null);
         }
 
         public String PrintFeatures() 
         {
             String features = null;
-            foreach (var key in BoolFeatures.Keys)
+            foreach (var key in OperationFeatures.Keys)
             {
-                features += (key + ":" + BoolFeatures[key] + Splitter);
+                features += (key + ":" + OperationFeatures[key] + Splitter);
             }
             features += (ExceptionType + Splitter);
-            foreach (var key in MethodFeatures.Keys)
+            foreach (var key in TextFeatures.Keys)
             {
-                features += (key + ":" + MethodFeatures[key] + Splitter);
+                features += (key + ":" + TextFeatures[key] + Splitter);
             }
             return features;
         }
@@ -165,11 +168,11 @@ namespace CatchBlockExtraction
                 }
 
                 //Update Statistics
-                if (catchBlock.BoolFeatures["Logged"] == 1)
+                if (catchBlock.OperationFeatures["Logged"] == 1)
                 {
                     this[exception].NumLogged++;
                     NumLogged++;
-                    if (catchBlock.BoolFeatures["Thrown"] == 1)
+                    if (catchBlock.OperationFeatures["Thrown"] == 1)
                     {
                         this[exception].NumLoggedAndThrown++;
                         NumLoggedAndThrown++;
@@ -180,7 +183,7 @@ namespace CatchBlockExtraction
                         NumLoggedNotThrown++;
                     }
                 }
-                if (catchBlock.BoolFeatures["Thrown"] == 1)
+                if (catchBlock.OperationFeatures["Thrown"] == 1)
                 {
                     this[exception].NumThrown++;
                     NumThrown++;

@@ -159,51 +159,62 @@ namespace CatchBlockExtraction
             CatchBlock catchBlockInfo = new CatchBlock();
             var model = treeAndModelDic[tree];
             catchBlockInfo.ExceptionType = GetExceptionType(catchblock, model);
-            catchBlockInfo.BoolFeatures["Logged"] = (FindLoggingIn(catchblock) != null) ? 1 : 0;
 
-            var throwStatement = FindThrowIn(catchblock);
+            //SyntaxNode
+
+            bool hasTryStatement = catchblock.DescendantNodesAndSelf()
+                      .OfType<TryStatementSyntax>().Any();
+            SyntaxNode updatedCatchBlock = catchblock;
+            if (hasTryStatement == true)
+            {
+                // remove try-catch-finally block inside
+                updatedCatchBlock = tryblockremover.Visit(catchblock);
+            }
+            catchBlockInfo.OperationFeatures["Logged"] = (FindLoggingIn(updatedCatchBlock) != null) ? 1 : 0;
+
+            var throwStatement = FindThrowIn(updatedCatchBlock);
             if (throwStatement != null)
             {
                 catchBlockInfo.MetaInfo["Thrown"] = throwStatement.ToString();
-                catchBlockInfo.BoolFeatures["Thrown"] = 1;
+                catchBlockInfo.OperationFeatures["Thrown"] = 1;
             }
 
-            var setLogicFlag = FindSetLogicFlagIn(catchblock);
+            var setLogicFlag = FindSetLogicFlagIn(updatedCatchBlock);
             if (setLogicFlag != null)
             {
                 catchBlockInfo.MetaInfo["SetLogicFlag"] = setLogicFlag.ToString();
-                catchBlockInfo.BoolFeatures["SetLogicFlag"] = 1;
+                catchBlockInfo.OperationFeatures["SetLogicFlag"] = 1;
             }
 
-            var returnStatement = FindReturnIn(catchblock);
+            var returnStatement = FindReturnIn(updatedCatchBlock);
             if (returnStatement != null)
             {
                 catchBlockInfo.MetaInfo["Return"] = returnStatement.ToString();
-                catchBlockInfo.BoolFeatures["Return"] = 1;
+                catchBlockInfo.OperationFeatures["Return"] = 1;
             }
 
             var recoverStatement = FindRecoverStatement(catchblock, model);
             if (recoverStatement != null)
             {
                 catchBlockInfo.MetaInfo["RecoverFlag"] = recoverStatement.ToString();
-                catchBlockInfo.BoolFeatures["RecoverFlag"] = 1;
+                catchBlockInfo.OperationFeatures["RecoverFlag"] = 1;
             }
 
-            var otherOperation = HasOtherOperation(catchblock, model);
+            var otherOperation = HasOtherOperation(updatedCatchBlock, model);
             if (otherOperation != null)
             {
                 catchBlockInfo.MetaInfo["OtherOperation"] = otherOperation.ToString();
-                catchBlockInfo.BoolFeatures["OtherOperation"] = 1;
+                catchBlockInfo.OperationFeatures["OtherOperation"] = 1;
             }
-            
-            if (IsEmptyBlock(catchblock))
+
+            if (IsEmptyBlock(updatedCatchBlock))
             {
-                catchBlockInfo.BoolFeatures["EmptyBlock"] = 1;            
+                catchBlockInfo.OperationFeatures["EmptyBlock"] = 1;            
             }
             
             var tryBlock = catchblock.Parent as TryStatementSyntax;
             catchBlockInfo.VariableFeatures = GetVariablesAndComments(tryBlock);
-            catchBlockInfo.MethodFeatures = GetAllInvokedMethodNamesByBFS(tryBlock, tree, 
+            catchBlockInfo.TextFeatures = GetAllInvokedMethodNamesByBFS(tryBlock, tree, 
                 treeAndModelDic, compilation);
 
             return catchBlockInfo;
@@ -243,17 +254,8 @@ namespace CatchBlockExtraction
             InvocationExpressionSyntax loggingStatement;
             try
             {
-                bool hasTryStatement = codeSnippet.DescendantNodesAndSelf()
-                        .OfType<TryStatementSyntax>().Any();
-
-                if (hasTryStatement == true)
-                {
-                    // remove try-catch-finally block inside
-                    codeSnippet = tryblockremover.Visit(codeSnippet);        
-                }
                 loggingStatement = codeSnippet.DescendantNodesAndSelf()
                         .OfType<InvocationExpressionSyntax>().First(IsLoggingStatement);
-
                 return loggingStatement;
             }
             catch
@@ -301,7 +303,7 @@ namespace CatchBlockExtraction
             
             while (codeSnippetQueue.Any())
             {
-                if (allInovkedMethods.Count > 50) break; // only save 20 method names
+                if (allInovkedMethods.Count > 20) break; // only save 20 method names
 
                 Tuple<SyntaxNode, SyntaxTree> snippetAndTree = codeSnippetQueue.Dequeue();
                 var snippet = snippetAndTree.Item1;
@@ -310,7 +312,7 @@ namespace CatchBlockExtraction
                 
                 foreach (var invocation in methodList)
                 {
-                    String methodName = null;
+                    String methodName = IOFile.TokenizeMethodName(invocation.ToString());
                     try
                     {   
                         // use a single semantic model
@@ -324,18 +326,9 @@ namespace CatchBlockExtraction
                             symbolInfo = model.GetSymbolInfo(invocation);
                             symbol = symbolInfo.Symbol;
                         }
-
-                        if (symbol == null)
-                        {
-                            methodName = IOFile.TokenizeMethodName(invocation.ToString());
-                        }
-                        else
+                        if (symbol != null)
                         {
                             methodName = IOFile.TokenizeMethodName(symbol.ToString());
-                        }
-                        if (methodName.IndexOf('.') != -1)
-                        {
-                            methodName = methodName.Split('.').Last();
                         }
                         if (allInovkedMethods.ContainsKey(methodName))
                         {
@@ -344,7 +337,11 @@ namespace CatchBlockExtraction
                         else
                         {
                             allInovkedMethods.Add(methodName, 1);
-
+                            if (symbol == null || methodName.StartsWith("System")) continue; // System API
+                            if (methodName.IndexOf('.') != -1)
+                            {
+                                methodName = methodName.Split('.').Last();
+                            }
                             // find the method declaration (go to definition)
                             var methodDeclarTupleList = treeAndModelDic.Keys.AsParallel()
                                 .Select(
@@ -387,7 +384,6 @@ namespace CatchBlockExtraction
                     }
                     catch (Exception e)
                     {
-                        methodName = IOFile.TokenizeMethodName(invocation.ToString());
                         MergeDic<String>(ref allInovkedMethods,
                                 new Dictionary<String, int>() { { methodName, 1 } });
                         Logger.Log(tree.FilePath);
@@ -413,8 +409,7 @@ namespace CatchBlockExtraction
             {
                 TryStatementSkipper tryblockskipper = new TryStatementSkipper();
                 tryblockskipper.Visit(codeSnippet);
-                methodList = tryblockskipper.invokedMethods;
-                
+                methodList = tryblockskipper.invokedMethods;                
             }
             else // has no try statement inside
             {
@@ -470,14 +465,6 @@ namespace CatchBlockExtraction
             ThrowStatementSyntax throwStatement;
             try
             {
-                bool hasTryStatement = codeSnippet.DescendantNodesAndSelf()
-                        .OfType<TryStatementSyntax>().Any();
-
-                if (hasTryStatement == true)
-                {
-                    // remove try-catch-finally block inside
-                    codeSnippet = tryblockremover.Visit(codeSnippet);
-                }
                 throwStatement = codeSnippet.DescendantNodes().OfType<ThrowStatementSyntax>().First();
                 return throwStatement;
             }
@@ -518,14 +505,6 @@ namespace CatchBlockExtraction
             BinaryExpressionSyntax setLogicFlagStatement;
             try
             {
-                bool hasTryStatement = codeSnippet.DescendantNodesAndSelf()
-                        .OfType<TryStatementSyntax>().Any();
-
-                if (hasTryStatement == true)
-                {
-                    // remove try-catch-finally block inside
-                    codeSnippet = tryblockremover.Visit(codeSnippet);
-                }
                 setLogicFlagStatement = codeSnippet.DescendantNodes().OfType<BinaryExpressionSyntax>()
                     .First(IsSetLogicFlagStatement);    
                 return setLogicFlagStatement;
@@ -541,14 +520,6 @@ namespace CatchBlockExtraction
             ReturnStatementSyntax returnStatement;
             try
             {
-                bool hasTryStatement = codeSnippet.DescendantNodesAndSelf()
-                        .OfType<TryStatementSyntax>().Any();
-
-                if (hasTryStatement == true)
-                {
-                    // remove try-catch-finally block inside
-                    codeSnippet = tryblockremover.Visit(codeSnippet);
-                }
                 returnStatement = codeSnippet.DescendantNodes().OfType<ReturnStatementSyntax>().First();
                 return returnStatement;
             }
@@ -558,7 +529,7 @@ namespace CatchBlockExtraction
             }
         }
 
-        public static bool IsRecoverStatement(SyntaxNode statement, SemanticModel semanticModel)
+        public static bool IsRecoverStatement(SyntaxNode statement, SemanticModel semanticModel)               
         {
             if (!IsLoggingStatement(statement) && !IsSetLogicFlagStatement(statement) && !IsThrow(statement))
             {
@@ -610,16 +581,6 @@ namespace CatchBlockExtraction
 
         static public StatementSyntax HasOtherOperation(SyntaxNode codeSnippet, SemanticModel semanticModel)
         {
-
-            bool hasTryStatement = codeSnippet.DescendantNodesAndSelf()
-                .OfType<TryStatementSyntax>().Any();
-
-            if (hasTryStatement == true)
-            {
-                // remove try-catch-finally block inside
-                codeSnippet = tryblockremover.Visit(codeSnippet);
-            }
-
             var statementNodes = codeSnippet.DescendantNodes().OfType<StatementSyntax>();
             foreach (var statement in statementNodes)
             {
