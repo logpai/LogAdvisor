@@ -33,11 +33,12 @@ namespace CatchBlockExtraction
             Logger.Log("Num of source files: " + numFiles);
             // analyze every tree simultaneously
             var allMethodDeclarations = treeAndModelDic.Keys.AsParallel()
-                .Select(tree => GetAllMethodDeclarations(tree, treeAndModelDic, compilation)).ToList();
+                .Select(tree => GetAllMethodDeclarations(tree, treeAndModelDic, compilation));
             foreach (var methoddeclar in allMethodDeclarations)
             {
                 MergeDic<String, MethodDeclarationSyntax>(ref AllMethodDeclarations, methoddeclar);
             }
+            Logger.Log("Cached all method declarations.");
 
             var codeStatsList = treeAndModelDic.Keys.AsParallel()
                 .Select(tree => AnalyzeATree(tree, treeAndModelDic, compilation)).ToList();
@@ -238,8 +239,11 @@ namespace CatchBlockExtraction
             var methodNameList = GetAllInvokedMethodNamesByBFS(tryBlock.Block, treeAndModelDic, compilation);
             catchBlockInfo.OperationFeatures["NumMethod"] = methodNameList.Count;
             catchBlockInfo.TextFeatures = methodNameList;
-            MergeDic<String>(ref catchBlockInfo.TextFeatures, 
-                new Dictionary<String, int>(){{containingMethod, 1}});
+            if (containingMethod != null)
+            {
+                MergeDic<String>(ref catchBlockInfo.TextFeatures,
+                    new Dictionary<String, int>() { { containingMethod, 1 } });
+            }
             MergeDic<String>(ref catchBlockInfo.TextFeatures, variableAndComments);
             
             return catchBlockInfo;
@@ -272,7 +276,7 @@ namespace CatchBlockExtraction
                 if (methodSymbol != null)
                 {
                     var methodDeclaration = methodSymbol.ToString();
-                    if (!allMethodDeclarations.ContainsKey(methodDeclaration))
+                    if (methodDeclaration != null && !allMethodDeclarations.ContainsKey(methodDeclaration))
                     {
                         allMethodDeclarations.Add(methodDeclaration, method);
                     }
