@@ -14,7 +14,8 @@ namespace CatchBlockExtraction
     static class CodeAnalyzer
     {
         public static TryStatementRemover tryblockremover = new TryStatementRemover();
-
+        public static Dictionary<String, MethodDeclarationSyntax> AllMethodDeclarations =
+            new Dictionary<String, MethodDeclarationSyntax>();
 
         /// <summary>
         /// Analyze the code by all trees and semantic models
@@ -31,11 +32,16 @@ namespace CatchBlockExtraction
             Logger.Log("Num of syntax nodes: " + treeNode.Sum());
             Logger.Log("Num of source files: " + numFiles);
             // analyze every tree simultaneously
+            var allMethodDeclarations = treeAndModelDic.Keys.AsParallel()
+                .Select(tree => GetAllMethodDeclarations(tree, treeAndModelDic, compilation)).ToList();
+            foreach (var methoddeclar in allMethodDeclarations)
+            {
+                MergeDic<String, MethodDeclarationSyntax>(ref AllMethodDeclarations, methoddeclar);
+            }
+
             var codeStatsList = treeAndModelDic.Keys.AsParallel()
-                .Select(tree => CodeAnalyzer.AnalyzeATree(tree, treeAndModelDic, compilation)).ToList();
-
+                .Select(tree => AnalyzeATree(tree, treeAndModelDic, compilation)).ToList();
             CodeStatistics allStats = new CodeStatistics(codeStatsList);
-
             // Log statistics
             allStats.PrintSatistics();
 
@@ -239,6 +245,42 @@ namespace CatchBlockExtraction
             return catchBlockInfo;
         }
 
+        public static Dictionary<String, MethodDeclarationSyntax> GetAllMethodDeclarations(SyntaxTree tree,
+            Dictionary<SyntaxTree, SemanticModel> treeAndModelDic, Compilation compilation)
+        {
+            var allMethodDeclarations = new Dictionary<String, MethodDeclarationSyntax>();
+
+            var root = tree.GetRoot();;
+            var methodDeclarList = root.DescendantNodes().OfType<MethodDeclarationSyntax>();
+            var model = treeAndModelDic[tree];
+            var modelBackup = compilation.GetSemanticModel(tree);
+            foreach (var method in methodDeclarList)
+            {
+                Symbol methodSymbol = null;
+                try
+                {
+                    methodSymbol = model.GetDeclaredSymbol(method);
+                }
+                catch
+                {
+                    try
+                    {
+                        methodSymbol = modelBackup.GetDeclaredSymbol(method);
+                    }
+                    catch { }
+                }
+                if (methodSymbol != null)
+                {
+                    var methodDeclaration = methodSymbol.ToString();
+                    if (!allMethodDeclarations.ContainsKey(methodDeclaration))
+                    {
+                        allMethodDeclarations.Add(methodDeclaration, method);
+                    }
+                }
+            }
+            return allMethodDeclarations;
+        }
+
         /// <summary>
         /// To check whether an invocation is a logging statement
         /// </summary>
@@ -348,48 +390,14 @@ namespace CatchBlockExtraction
                         {
                             allInovkedMethods.Add(methodName, 1);
                             if (level >= 3) continue; // only go backward to 3 levels
-                            if (symbol == null || methodName.StartsWith("System")) continue; // System API
-                            if (methodName.IndexOf('.') != -1)
-                            {
-                                methodName = methodName.Split('.').Last();
-                            }
-                            // find the method declaration (go to definition)
-                            var methodDeclarTupleList = treeAndModelDic.Keys.AsParallel()
-                                .Select(
-                                delegate(SyntaxTree searchtree)
-                                {
-                                    var root = searchtree.GetRoot();
-                                    var methodDeclarList = root.DescendantNodes()
-                                        .OfType<MethodDeclarationSyntax>()
-                                        .Where(m => m.Identifier.ValueText == methodName)
-                                        .ToList();
-                                    var semanticModel = treeAndModelDic[searchtree];
-                                    var semanticModelBackup = compilation.GetSemanticModel(searchtree);
-                                    foreach (var mdeclar in methodDeclarList)
-                                    {
-                                        Symbol methodSymbol;
-                                        try
-                                        {
-                                            methodSymbol = semanticModel.GetDeclaredSymbol(mdeclar);
-                                        }
-                                        catch
-                                        {
-                                            methodSymbol = semanticModelBackup.GetDeclaredSymbol(mdeclar);
-                                        }
-                                        if (symbol.ToString() == methodSymbol.ToString())
-                                        {
-                                            return new Tuple<SyntaxNode, int>(mdeclar, level + 1);
-                                        }
-                                    }
-                                    return null;
-                                });
+                            if (methodName.StartsWith("System")) continue; // System API
 
-                            try
+                            if (symbol != null && AllMethodDeclarations.ContainsKey(symbol.ToString()))
                             {
-                                var methodDeclaration = methodDeclarTupleList.First(mdeclar => mdeclar != null);
-                                codeSnippetQueue.Enqueue(methodDeclaration);
+                                // find the method declaration (go to definition)
+                                var mdeclar = AllMethodDeclarations[symbol.ToString()];
+                                codeSnippetQueue.Enqueue(new Tuple<SyntaxNode, int>(mdeclar, level + 1));
                             }
-                            catch { }
                         }
                     }
                     catch (Exception e)
@@ -467,18 +475,11 @@ namespace CatchBlockExtraction
             String methodName = null;
             try
             {
-                method = codeSnippet.Ancestors().OfType<MethodDeclarationSyntax>().First();
+                method = codeSnippet.Ancestors().OfType<BaseMethodDeclarationSyntax>().First();
             }
             catch
             {
-                try
-                {
-                    method = codeSnippet.Ancestors().OfType<ConstructorDeclarationSyntax>().First();
-                }
-                catch 
-                {
-                    // Skip method type: e.g., operator method
-                }
+                // Skip method type: e.g., operator method
             }
 
             Symbol methodSymbol;
@@ -523,6 +524,17 @@ namespace CatchBlockExtraction
                     dic1[key] += dic2[key];
                 }
                 else
+                {
+                    dic1.Add(key, dic2[key]);
+                }
+            }
+        }
+
+        public static void MergeDic<T1, T2>(ref Dictionary<T1, T2> dic1, Dictionary<T1, T2> dic2)
+        {
+            foreach (var key in dic2.Keys)
+            {
+                if (!dic1.ContainsKey(key))
                 {
                     dic1.Add(key, dic2[key]);
                 }
