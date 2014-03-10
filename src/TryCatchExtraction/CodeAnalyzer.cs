@@ -228,9 +228,12 @@ namespace CatchBlockExtraction
             
             var tryBlock = catchblock.Parent as TryStatementSyntax;
             var variableAndComments = GetVariablesAndComments(tryBlock.Block);
+            var containingMethod = GetContainingMethodName(tryBlock, model);
             var methodNameList = GetAllInvokedMethodNamesByBFS(tryBlock.Block, treeAndModelDic, compilation);
             catchBlockInfo.OperationFeatures["NumMethod"] = methodNameList.Count;
             catchBlockInfo.TextFeatures = methodNameList;
+            MergeDic<String>(ref catchBlockInfo.TextFeatures, 
+                new Dictionary<String, int>(){{containingMethod, 1}});
             MergeDic<String>(ref catchBlockInfo.TextFeatures, variableAndComments);
             
             return catchBlockInfo;
@@ -455,6 +458,60 @@ namespace CatchBlockExtraction
                     new Dictionary<String, int>() { { updatedComment, 1 } });
             }
             return variableAndComments;
+        }
+
+        public static String GetContainingMethodName(SyntaxNode codeSnippet, SemanticModel model)
+        {
+            // Method name
+            SyntaxNode method = null;
+            String methodName = null;
+            try
+            {
+                method = codeSnippet.Ancestors().OfType<MethodDeclarationSyntax>().First();
+            }
+            catch
+            {
+                try
+                {
+                    method = codeSnippet.Ancestors().OfType<ConstructorDeclarationSyntax>().First();
+                }
+                catch 
+                {
+                    // Skip method type: e.g., operator method
+                }
+            }
+
+            Symbol methodSymbol;
+            if (method != null)
+            {
+                if (method is MethodDeclarationSyntax)
+                {
+                    var methodDeclaration = method as MethodDeclarationSyntax;
+                    try
+                    {
+                        methodSymbol = model.GetDeclaredSymbol(methodDeclaration);
+                        methodName = methodSymbol.ToString();
+                    }
+                    catch 
+                    {
+                        methodName = methodDeclaration.Identifier.ValueText;
+                    }
+                }
+                else if (method is ConstructorDeclarationSyntax)
+                {
+                    var methodDeclaration = method as ConstructorDeclarationSyntax;
+                    try
+                    {
+                        methodSymbol = model.GetDeclaredSymbol(methodDeclaration);
+                        methodName = methodSymbol.ToString();
+                    }
+                    catch
+                    {
+                        methodName = methodDeclaration.Identifier.ValueText;
+                    }
+                }
+            }
+            return IOFile.TokenizeMethodName(methodName);
         }
 
         public static void MergeDic<T>(ref Dictionary<T, int> dic1, Dictionary<T, int> dic2)
