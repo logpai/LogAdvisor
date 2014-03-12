@@ -29,8 +29,7 @@ namespace CatchBlockExtraction
             int numFiles = treeAndModelDic.Count;
             var treeNode = treeAndModelDic.Keys
                 .Select(tree => tree.GetRoot().DescendantNodes().Count());
-            Logger.Log("Num of syntax nodes: " + treeNode.Sum());
-            Logger.Log("Num of source files: " + numFiles);
+
             // analyze every tree simultaneously
             var allMethodDeclarations = treeAndModelDic.Keys.AsParallel()
                 .Select(tree => GetAllMethodDeclarations(tree, treeAndModelDic, compilation));
@@ -44,18 +43,24 @@ namespace CatchBlockExtraction
                 .Select(tree => AnalyzeATree(tree, treeAndModelDic, compilation)).ToList();
             CodeStatistics allStats = new CodeStatistics(codeStatsList);
             // Log statistics
+            Logger.Log("Num of syntax nodes: " + treeNode.Sum());
+            Logger.Log("Num of source files: " + numFiles);
             allStats.PrintSatistics();
 
             // Save all the source code into a txt file
-            var sb = new StringBuilder(treeAndModelDic.Keys.First().Length * numFiles); //initial length
-            foreach (var stat in codeStatsList)
+            bool saveAllSource = false;
+            if (saveAllSource == true)
             {
-                sb.Append(stat.Item1.GetText());
-            }
-            String txtFilePath = IOFile.CompleteFileName("AllSource.txt");
-            using (StreamWriter sw = new StreamWriter(txtFilePath))
-            {
-                sw.Write(sb.ToString());
+                var sb = new StringBuilder(treeAndModelDic.Keys.First().Length * numFiles); //initial length
+                foreach (var stat in codeStatsList)
+                {
+                    sb.Append(stat.Item1.GetText());
+                }
+                String txtFilePath = IOFile.CompleteFileName("AllSource.txt");
+                using (StreamWriter sw = new StreamWriter(txtFilePath))
+                {
+                    sw.Write(sb.ToString());
+                }
             }
         }
 
@@ -165,8 +170,9 @@ namespace CatchBlockExtraction
         {
             CatchBlock catchBlockInfo = new CatchBlock();
             var tree = catchblock.SyntaxTree;
-            var model = treeAndModelDic[tree];
-            catchBlockInfo.ExceptionType = GetExceptionType(catchblock, model);
+            var model = treeAndModelDic[tree];          
+            var exceptionType = GetExceptionType(catchblock, model);
+            catchBlockInfo.ExceptionType = IOFile.MethodNameExtraction(exceptionType);
 
             var fileLinePositionSpan = tree.GetLineSpan(catchblock.Span, false);
             var startLine = fileLinePositionSpan.StartLinePosition.Line + 1;
@@ -244,6 +250,8 @@ namespace CatchBlockExtraction
                 MergeDic<String>(ref catchBlockInfo.TextFeatures,
                     new Dictionary<String, int>() { { containingMethod, 1 } });
             }
+            MergeDic<String>(ref catchBlockInfo.TextFeatures,
+                    new Dictionary<String, int>() { { "##spliter##", 0 } }); // to seperate methods and variables
             MergeDic<String>(ref catchBlockInfo.TextFeatures, variableAndComments);
             
             return catchBlockInfo;
@@ -254,7 +262,7 @@ namespace CatchBlockExtraction
         {
             var allMethodDeclarations = new Dictionary<String, MethodDeclarationSyntax>();
 
-            var root = tree.GetRoot();;
+            var root = tree.GetRoot();
             var methodDeclarList = root.DescendantNodes().OfType<MethodDeclarationSyntax>();
             var model = treeAndModelDic[tree];
             var modelBackup = compilation.GetSemanticModel(tree);
@@ -290,7 +298,7 @@ namespace CatchBlockExtraction
         /// </summary>
         static public bool IsLoggingStatement(SyntaxNode statement)
         {
-            String logging = IOFile.TokenizeMethodName(statement.ToString());
+            String logging = IOFile.MethodNameExtraction(statement.ToString());
             if (logging == null) return false;
 
             foreach (String notlogmethod in Config.NotLogMethods)
@@ -368,7 +376,7 @@ namespace CatchBlockExtraction
                 
                 foreach (var invocation in methodList)
                 {
-                    String methodName = IOFile.TokenizeMethodName(invocation.ToString());
+                    String methodName = IOFile.MethodNameExtraction(invocation.ToString());
                     try
                     {   
                         // use a single semantic model
@@ -384,7 +392,7 @@ namespace CatchBlockExtraction
                         }
                         if (symbol != null)
                         {
-                            methodName = IOFile.TokenizeMethodName(symbol.ToString());
+                            methodName = IOFile.MethodNameExtraction(symbol.ToString());
                         }
                         if (allInovkedMethods.ContainsKey(methodName))
                         {
@@ -393,7 +401,7 @@ namespace CatchBlockExtraction
                         else
                         {
                             allInovkedMethods.Add(methodName, 1);
-                            if (level >= 3) continue; // only go backward to 3 levels
+                            //if (level >= 3) continue; // only go backward to 3 levels
                             if (methodName.StartsWith("System")) continue; // System API
 
                             if (symbol != null && AllMethodDeclarations.ContainsKey(symbol.ToString()))
@@ -456,8 +464,9 @@ namespace CatchBlockExtraction
                 .Where(variable => !variable.IsInTypeOnlyContext());
             foreach (var variable in variableList)
             {
+                var variableName = IOFile.MethodNameExtraction(variable.ToString());
                 MergeDic<String>(ref variableAndComments,
-                    new Dictionary<String, int>() { { variable.ToString(), 1 } });
+                    new Dictionary<String, int>() { { variableName, 1 } });
             }
 
             var commentList = codeSnippet.DescendantTrivia()
@@ -466,6 +475,9 @@ namespace CatchBlockExtraction
             foreach (var comment in commentList)
             {
                 String updatedComment = IOFile.DeleteSpace(comment.ToString());
+                updatedComment = Regex.Replace(updatedComment, "<.*>", "");
+                updatedComment = Regex.Replace(updatedComment, "{.*}", "");
+                updatedComment = Regex.Replace(updatedComment, "\\(.*\\)", "");
                 MergeDic<String>(ref variableAndComments,
                     new Dictionary<String, int>() { { updatedComment, 1 } });
             }
@@ -516,7 +528,7 @@ namespace CatchBlockExtraction
                     }
                 }
             }
-            return IOFile.TokenizeMethodName(methodName);
+            return IOFile.MethodNameExtraction(methodName);
         }
 
         public static void MergeDic<T>(ref Dictionary<T, int> dic1, Dictionary<T, int> dic2)

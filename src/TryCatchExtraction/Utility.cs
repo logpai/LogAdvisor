@@ -109,26 +109,31 @@ namespace CatchBlockExtraction
 
         static public String DeleteSpace(String str)
         {
-            String updatedStr = str;
-            try
-            {
-                updatedStr = str.Replace("\n", "").Replace("\r", "").Replace("\t", "")
-                .Replace("    ", " ").Replace("    ", " ").Replace("   ", " ")
-                .Replace("  ", " ");
-            }
-            catch {}
+            if (str == null || str == "") return str;
+
+            String updatedStr = str.Replace("\n", "").Replace("\r", "").Replace("\t", "")
+            .Replace("    ", " ").Replace("    ", " ").Replace("   ", " ")
+            .Replace("  ", " ");
+
             return updatedStr;
         }
 
-        static public String TokenizeMethodName(String str)
+        static public String MethodNameExtraction(String str)
         {
             try
             {
                 String methodName = str;
                 try
-                {
-                    methodName = Regex.Replace(methodName, "\\(.*\\)", "");
+                {                  
                     methodName = Regex.Replace(methodName, "<.*>", "");
+                    methodName = Regex.Replace(methodName, "{.*}", "");
+                    methodName = Regex.Replace(methodName, "\\(.*\\)", "");
+                    if (methodName.IndexOf('(') != -1)
+                    {
+                        methodName = methodName.Split('(').First();
+                    }
+                    methodName = DeleteSpace(methodName);
+                    methodName = methodName.Replace(" ", "");
                 }
                 catch { }
                 return methodName;
