@@ -173,8 +173,9 @@ namespace CatchBlockExtraction
             var model = treeAndModelDic[tree];          
             var exceptionType = GetExceptionType(catchblock, model);
             catchBlockInfo.ExceptionType = IOFile.MethodNameExtraction(exceptionType);
+            var tryBlock = catchblock.Parent as TryStatementSyntax;
 
-            var fileLinePositionSpan = tree.GetLineSpan(catchblock.Span, false);
+            var fileLinePositionSpan = tree.GetLineSpan(tryBlock.Block.Span, false);
             var startLine = fileLinePositionSpan.StartLinePosition.Line + 1;
             var endLine = fileLinePositionSpan.EndLinePosition.Line + 1;
             catchBlockInfo.OperationFeatures["LOC"] = endLine - startLine;
@@ -239,7 +240,6 @@ namespace CatchBlockExtraction
                 catchBlockInfo.OperationFeatures["EmptyBlock"] = 1;            
             }
             
-            var tryBlock = catchblock.Parent as TryStatementSyntax;
             var variableAndComments = GetVariablesAndComments(tryBlock.Block);
             var containingMethod = GetContainingMethodName(tryBlock, model);
             var methodNameList = GetAllInvokedMethodNamesByBFS(tryBlock.Block, treeAndModelDic, compilation);
@@ -343,7 +343,7 @@ namespace CatchBlockExtraction
                 TypeSymbol typeSymbol = semanticModel.GetTypeInfo(type).Type;
                 if (typeSymbol != null)
                 {
-                    return typeSymbol.ToString(); //return "System.IO.IOException
+                    return typeSymbol.ToString(); //e.g., "System.IO.IOException
                 }
                 else
                 {
@@ -353,7 +353,7 @@ namespace CatchBlockExtraction
             catch
             {
                 // the default exception type
-                return "System.Exception";
+                return "System.UndeclaredException.Type";
             }
         }
 
@@ -401,7 +401,7 @@ namespace CatchBlockExtraction
                         else
                         {
                             allInovkedMethods.Add(methodName, 1);
-                            //if (level >= 3) continue; // only go backward to 3 levels
+                            if (level > 3) continue; // only go backward to 3 levels
                             if (methodName.StartsWith("System")) continue; // System API
 
                             if (symbol != null && AllMethodDeclarations.ContainsKey(symbol.ToString()))
@@ -446,7 +446,8 @@ namespace CatchBlockExtraction
                 methodList = codeSnippet.DescendantNodes().OfType<InvocationExpressionSyntax>().ToList();
             }
 
-            return methodList;
+            var updatedMethodList = methodList.Where(method => !IsLoggingStatement(method)).ToList();
+            return updatedMethodList;
         }
 
         public static Dictionary<String, int> GetVariablesAndComments(SyntaxNode codeSnippet)

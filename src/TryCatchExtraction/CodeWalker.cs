@@ -45,7 +45,7 @@ namespace CatchBlockExtraction
                     LoadByFolder(filePath);
                     break;
                 case "ByTxtFile":
-                    //LoadByTxtFile(filePath);
+                    LoadByTxtFile(filePath);
                     break;
                 default:
                     Logger.Log("Invalid input mode. (Select ByFolder/ByTxtFile)");
@@ -75,7 +75,7 @@ namespace CatchBlockExtraction
 
             CodeAnalyzer.AnalyzeAllTrees(treeAndModelDic, compilation);
         }
-/*
+
         public static void LoadByTxtFile(String folderPath)
         {
             String txtFilePath = IOFile.CompleteFileName("AllSource.txt");
@@ -101,9 +101,10 @@ namespace CatchBlockExtraction
             var model = GetSemanticInfo(tree);
             var treeAndModelDic = new Dictionary<SyntaxTree, SemanticModel>();
             treeAndModelDic.Add(tree, model);
-            CodeAnalyzer.AnalyzeAllTrees(treeAndModelDic);
+            var compilation = BuildCompilation(new List<SyntaxTree> { tree });
+            CodeAnalyzer.AnalyzeAllTrees(treeAndModelDic, compilation);
         }
-*/
+
         public static Tuple<SyntaxTree, SemanticModel> LoadSourceFile(String sourceFile)
         {
             Logger.Log("Loading source file: " + sourceFile);
