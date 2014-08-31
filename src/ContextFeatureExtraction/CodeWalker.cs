@@ -33,7 +33,6 @@ namespace ContextFeatureExtraction
                 var reference = new MetadataFileReference(libFile);
                 appReflist.Add(reference);
             }
-
         }
 
         public void LoadByInputMode(String inputMode, String filePath)

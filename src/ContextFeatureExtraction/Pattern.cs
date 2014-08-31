@@ -14,7 +14,8 @@ namespace ContextFeatureExtraction
     class TreeStatistics
     {
         public Dictionary<String, int> CodeStats;
-        public List<CatchBlock> CatchList;
+        public List<CatchBlock> CatchBlockList;
+        public List<APICall> APICallList;
 
         public TreeStatistics()
         {
@@ -30,13 +31,17 @@ namespace ContextFeatureExtraction
             CodeStats.Add("NumLoggedFile", 0);
             CodeStats.Add("NumCatchBlock", 0);
             CodeStats.Add("NumLoggedCatchBlock", 0);
-            CodeStats.Add("NumExceptionType", 0);
+            CodeStats.Add("NumExceptionType", 0);          
+            CodeStats.Add("NumCallType", 0);
+            CodeStats.Add("NumAPICall", 0);
+            CodeStats.Add("NumLoggedAPICall", 0);
         }
 
         public static void Add<T>(ref Dictionary<T, int> dic1, Dictionary<T, int> dic2)
         {
             foreach (var key in dic2.Keys)
             {
+                if (key == null) continue;
                 if (dic1.ContainsKey(key))
                 {
                     dic1[key] += dic2[key];
@@ -54,19 +59,26 @@ namespace ContextFeatureExtraction
     {
         public List<Tuple<SyntaxTree, TreeStatistics>> TreeStats;
         public CatchDic CatchBlocks;
+        public CallDic APICalls;
 
         public CodeStatistics(List<Tuple<SyntaxTree, TreeStatistics>> treestats)
         {
             TreeStats = treestats;
             CatchBlocks = new CatchDic();
+            APICalls = new CallDic();
             CodeStats = new Dictionary<String, int>();
             foreach (var treetuple in treestats)
             {
-                CatchBlocks.Add(treetuple.Item2.CatchList);
+                if (treetuple == null) continue;
+                CatchBlocks.Add(treetuple.Item2.CatchBlockList);
+                APICalls.Add(treetuple.Item2.APICallList);
                 CodeAnalyzer.MergeDic<String>(ref CodeStats, treetuple.Item2.CodeStats);               
             }
             CodeStats["NumExceptionType"] = CatchBlocks.Count;
             CodeStats["NumLoggedCatchBlock"] = CatchBlocks.NumLogged;
+            CodeStats["NumCallType"] = APICalls.Count;
+            CodeStats["NumAPICall"] = APICalls.NumAPICall;
+            CodeStats["NumLoggedAPICall"] = APICalls.NumLogged;
         }
 
         public void PrintSatistics()
@@ -76,6 +88,7 @@ namespace ContextFeatureExtraction
                 Logger.Log(stat + ": " + CodeStats[stat]);
             }
             CatchBlocks.PrintToFile();
+            APICalls.PrintToFile();
         }
     }
 
@@ -169,6 +182,7 @@ namespace ContextFeatureExtraction
         {
             foreach (var catchBlock in catchList)
             {
+                if (catchBlock == null) continue;
                 NumCatch++;
                 String exception = catchBlock.ExceptionType;
                 if (this.ContainsKey(exception))
@@ -281,4 +295,181 @@ namespace ContextFeatureExtraction
             Logger.Log("Writing done.");
         }
     }
+
+    class APICall : CommonFeature
+    {
+        public String CallType;
+        public static List<String> MetaKeys;
+
+        public APICall() : base()
+        {
+            OperationFeatures.Add("EmptyBlock", 0);
+            OperationFeatures.Add("RecoverFlag", 0);
+            OperationFeatures.Add("OtherOperation", 0);
+            MetaInfo.Add("RecoverFlag", null);
+            MetaInfo.Add("OtherOperation", null);
+            MetaInfo.Add("CheckIfBlock", null);
+            MetaKeys = MetaInfo.Keys.ToList();
+        }
+
+        public String PrintFeatures()
+        {
+            String features = null;
+            foreach (var key in OperationFeatures.Keys)
+            {
+                features += (key + ":" + OperationFeatures[key] + Splitter);
+            }
+            features += (CallType + Splitter);
+            foreach (var key in TextFeatures.Keys)
+            {
+                features += (key + ":" + TextFeatures[key] + Splitter);
+            }
+            return features;
+        }
+
+        public String PrintMetaInfo()
+        {
+            String metaInfo = null;
+            foreach (var key in MetaInfo.Keys)
+            {
+                metaInfo += (IOFile.DeleteSpace(MetaInfo[key]) + Splitter);
+            }
+            return metaInfo;
+        }
+    }
+
+    class CallList : List<APICall>
+    {
+        public int NumLogged = 0;
+        public int NumThrown = 0;
+        public int NumLoggedAndThrown = 0;
+        public int NumLoggedNotThrown = 0;
+    }
+
+    class CallDic : Dictionary<String, CallList>
+    {
+        public int NumAPICall = 0;
+        public int NumLogged = 0;
+        public int NumThrown = 0;
+        public int NumLoggedAndThrown = 0;
+        public int NumLoggedNotThrown = 0;
+
+        public void Add(List<APICall> callList)
+        {
+            foreach (var apiCall in callList)
+            {
+                if (apiCall == null) continue;
+                NumAPICall++;
+                String calltype = apiCall.CallType;
+                if (this.ContainsKey(calltype))
+                {
+                    this[calltype].Add(apiCall);
+                }
+                else
+                {
+                    //Create a new list for this type.
+                    this.Add(calltype, new CallList());
+                    this[calltype].Add(apiCall);
+                }
+
+                //Update Statistics
+                if (apiCall.OperationFeatures["Logged"] == 1)
+                {
+                    this[calltype].NumLogged++;
+                    NumLogged++;
+                    if (apiCall.OperationFeatures["Thrown"] == 1)
+                    {
+                        this[calltype].NumLoggedAndThrown++;
+                        NumLoggedAndThrown++;
+                    }
+                    else
+                    {
+                        this[calltype].NumLoggedNotThrown++;
+                        NumLoggedNotThrown++;
+                    }
+                }
+                if (apiCall.OperationFeatures["Thrown"] == 1)
+                {
+                    this[calltype].NumThrown++;
+                    NumThrown++;
+                }
+            }
+        }
+
+        public void PrintToFile()
+        {
+            Logger.Log("Writing APICall features into file...");
+            StreamWriter sw = new StreamWriter(IOFile.CompleteFileName("APICall.txt"));
+            StreamWriter metaSW = new StreamWriter(IOFile.CompleteFileName("APICall_Meta.txt"));
+            int callId = 0;
+            String metaKey = CatchBlock.Splitter;
+            foreach (var meta in CatchBlock.MetaKeys)
+            {
+                metaKey += (meta + CatchBlock.Splitter);
+            }
+            metaSW.WriteLine(metaKey);
+            metaSW.WriteLine("--------------------------------------------------------");
+            metaSW.WriteLine("NumCallType: {0}, NumAPICall: {1}, NumLogged: {2}, "
+                    + "NumThrown: {3}, NumLoggedAndThrown: {4}, NumLoggedNotThrown: {5}.",
+                    this.Count,
+                    NumAPICall,
+                    NumLogged,
+                    NumThrown,
+                    NumLoggedAndThrown,
+                    NumLoggedNotThrown);
+            metaSW.WriteLine();
+
+            foreach (String calltype in this.Keys)
+            {
+                metaSW.WriteLine("--------------------------------------------------------");
+                CallList callList = this[calltype];
+                metaSW.WriteLine("Call Type [{0}]: NumAPICall: {1}, NumLogged: {2}, "
+                        + "NumThrown: {3}, NumLoggedAndThrown: {4}, NumLoggedNotThrown: {5}.",
+                        calltype,
+                        callList.Count,
+                        callList.NumLogged,
+                        callList.NumThrown,
+                        callList.NumLoggedAndThrown,
+                        callList.NumLoggedNotThrown
+                        );
+                foreach (var apicall in callList)
+                {
+                    callId++;
+                    sw.WriteLine("ID:" + callId + APICall.Splitter + apicall.PrintFeatures());
+                    metaSW.WriteLine("ID:" + callId + APICall.Splitter + apicall.PrintMetaInfo());
+                }
+                metaSW.WriteLine();
+                metaSW.WriteLine();
+                sw.Flush();
+                metaSW.Flush();
+            }
+
+            //Print summary
+            metaSW.WriteLine("------------------------ Summary -------------------------");
+            metaSW.WriteLine("{0}\t{1}\t{2}\t{3}\t{4}\t{5}",
+                    "Call Type",
+                    "NumAPICall",
+                    "NumLogged",
+                    "NumThrown",
+                    "NumLoggedAndThrown",
+                    "NumLoggedNotThrown");
+
+            foreach (String exception in this.Keys)
+            {
+                var catchList = this[exception];
+                metaSW.WriteLine("{0}\t{1}\t{2}\t{3}\t{4}\t{5}",
+                        exception,
+                        catchList.Count,
+                        catchList.NumLogged,
+                        catchList.NumThrown,
+                        catchList.NumLoggedAndThrown,
+                        catchList.NumLoggedNotThrown
+                        );
+            }
+            sw.Close();
+            metaSW.Close();
+            Logger.Log("Writing done.");
+        }
+    }
 }
+

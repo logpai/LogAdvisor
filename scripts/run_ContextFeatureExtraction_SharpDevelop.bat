@@ -1,1 +1,1 @@
-..\bin\ContextFeatureExtraction ByFolder ..\dataset\SharpDevelop
+..\release\ContextFeatureExtraction ByFolder ..\data\SharpDevelop

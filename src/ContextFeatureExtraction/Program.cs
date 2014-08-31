@@ -18,7 +18,7 @@ namespace ContextFeatureExtraction
             {
                 filePath = filePath.Remove(filePath.LastIndexOf('\\'));
             }
-            IOFile.FolderPath = filePath;
+            IOFile.FolderPath = Path.GetFullPath(filePath);
             
             Logger.Initialize();
             DateTime StartTime = DateTime.Now;          

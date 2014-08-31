@@ -1,0 +1,5 @@
+LoggingService,WriteLine,LogError%	LogMethods
+% NotLogMethods
+2%					LogLevelIndex
+O%					Orthogonal
+0%					Condition Index in Assert

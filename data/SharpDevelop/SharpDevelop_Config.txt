@@ -1,0 +1,5 @@
+LoggingService.,host.Writer.Write,WriteComment,Trace.Write,TraceUtil.Write,File.WriteAllText,DebugLogException,LogError,Debug.Assert,Debug.Write,LogWarningFromException,LogSyntaxError,WriteLine,stackTrace.Append%	 	LogMethods
+WriteLineIf,TraceUtil.If,html.WriteLine,gen.WriteLine,output.WriteLine,o.WriteLine% NotLogMethods
+0%					LogLevelIndex
+O%					Orthogonal
+0%					Condition Index in Assert

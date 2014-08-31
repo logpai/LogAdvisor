@@ -1,1 +1,1 @@
-..\bin\ContextFeatureExtraction ByFolder ..\dataset\MonoDevelop
+..\release\ContextFeatureExtraction ByFolder ..\data\MonoDevelop
