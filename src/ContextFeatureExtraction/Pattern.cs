@@ -70,9 +70,18 @@ namespace ContextFeatureExtraction
             foreach (var treetuple in treestats)
             {
                 if (treetuple == null) continue;
-                CatchBlocks.Add(treetuple.Item2.CatchBlockList);
-                APICalls.Add(treetuple.Item2.APICallList);
-                CodeAnalyzer.MergeDic<String>(ref CodeStats, treetuple.Item2.CodeStats);               
+                if (treetuple.Item2.CatchBlockList != null)
+                {
+                    CatchBlocks.Add(treetuple.Item2.CatchBlockList);
+                }
+                if (treetuple.Item2.APICallList != null)
+                {
+                    APICalls.Add(treetuple.Item2.APICallList);
+                }
+                if (treetuple.Item2.CodeStats != null) 
+                {
+                    CodeAnalyzer.MergeDic<String>(ref CodeStats, treetuple.Item2.CodeStats);
+                }
             }
             CodeStats["NumExceptionType"] = CatchBlocks.Count;
             CodeStats["NumLoggedCatchBlock"] = CatchBlocks.NumLogged;

@@ -195,8 +195,14 @@ namespace ContextFeatureExtraction
             SyntaxNode updatedCatchBlock = catchblock;
             if (hasTryStatement == true)
             {
-                // remove try-catch-finally block inside
-                updatedCatchBlock = tryblockremover.Visit(catchblock);
+                try {
+                    // remove try-catch-finally block inside
+                    updatedCatchBlock = tryblockremover.Visit(catchblock);
+                }
+                catch (System.ArgumentNullException e)
+                {
+                    // ignore the ArgumentNullException 
+                }
             }
 
             catchBlockInfo.MetaInfo["CatchBlock"] = catchblock.ToString();
@@ -286,8 +292,12 @@ namespace ContextFeatureExtraction
             if (checkIfBlock == null) return null;
             APICall apiCallInfo = new APICall();
 
-            apiCallInfo.CallType = IOFile.MethodNameExtraction(returnType) + " "
-                + IOFile.MethodNameExtraction(apiCallName);
+            String callType = IOFile.ShortMethodNameExtraction(apiCallName);
+            if (callType == null)
+            {
+                callType = "Error";
+            }
+            apiCallInfo.CallType = callType;
 
             var fileLinePositionSpan = tree.GetLineSpan(checkIfBlock.Span, false);
             var startLine = fileLinePositionSpan.StartLinePosition.Line + 1;
@@ -374,6 +384,11 @@ namespace ContextFeatureExtraction
             {
                 MergeDic<String>(ref apiCallInfo.TextFeatures,
                     new Dictionary<String, int>() { { IOFile.MethodNameExtraction(apiCallName), 1 } });
+            }
+            else if (IOFile.ShortMethodNameExtraction(apiCallName) != null)
+            {
+                MergeDic<String>(ref apiCallInfo.TextFeatures,
+                    new Dictionary<String, int>() { { IOFile.ShortMethodNameExtraction(apiCallName), 1 } });
             }
 
             return apiCallInfo;
@@ -852,7 +867,7 @@ namespace ContextFeatureExtraction
 
         public static String GetReturnValueType(InvocationExpressionSyntax node, SemanticModel semanticModel)
         {
-            String ReturnType = "Error";
+            String ReturnType = null;
             if (node == null)
             {
                 Logger.Log("node == null");
@@ -898,7 +913,7 @@ namespace ContextFeatureExtraction
             }
             catch
             {
-                return null;
+                return child.ToString();
             }
         }
 
