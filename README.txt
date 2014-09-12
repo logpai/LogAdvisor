@@ -1,5 +1,5 @@
+README for LogAdvisor
 ----------------------------------------------------------------------------
-### README for LogAdvisor
 
 Author: Jamie Zhu <jimzhu@GitHub>
 Last updated: 2014/9/12.
