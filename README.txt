@@ -1,4 +1,4 @@
-README for LogAdvisor
+LogAdvisor  http://rmblab.github.io/LogAdvisor
 ----------------------------------------------------------------------------
 
 Author: Jamie Zhu <jimzhu@GitHub>
@@ -9,14 +9,14 @@ is used to extract all the data instances (including the extracted features
 and logging label).
 
 ----------------------------------------------------------------------------
-### Dependencies
+Dependencies
 ----------------------------------------------------------------------------
 
 - Visual Studio 2012 or later
 - Roslyn (https://roslyn.codeplex.com)
 
 ----------------------------------------------------------------------------
-### Contents of this repository
+Contents of this repository
 ----------------------------------------------------------------------------
 
 data/
@@ -30,7 +30,7 @@ src/                    - the source code for feature extraction based on
 user_study/             - the materials for user study
 	  
 ----------------------------------------------------------------------------
-### Issues
+Issues
 ----------------------------------------------------------------------------
 
 In case of questions or problems, please do not hesitate to report to our 
@@ -39,7 +39,7 @@ In addition, we will appreciate any contribution to refine and optimize this
 package.
 
 ----------------------------------------------------------------------------
-### Copyright
+Copyright
 ----------------------------------------------------------------------------
 
 Copyright (c) LogAdvisor@GitHub, CUHK.
