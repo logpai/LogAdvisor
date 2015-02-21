@@ -2,7 +2,7 @@
 
 This repository maintains the source code for our project "Learning to Log", which aims to automatically learn the common logging practice from existing code repositories. The source code is used to extract all the data instances (including the extracted features and logging labels).
 
-Read more information: [[Paper](http://appsrv.cse.cuhk.edu.hk/~jmzhu/pub/jmzhu_icse2015.pdf)][[Project page](http://tiic.github.io/LogAdvisor)]
+Read more information: [[Paper](http://jiemingzhu.github.io/pub/jmzhu_icse2015.pdf)][[Project page](http://cuhk-cse.github.io/LogAdvisor)]
 
 
 ##Citation
@@ -36,12 +36,11 @@ user_study/             - the materials for user study
 ##Issues
 
 In case of questions or problems, please do not hesitate to report to our 
-issue page (https://github.com/TIIC/LogAdvisor/issues). We will help ASAP. 
+issue page (https://github.com/CUHK-CSE/LogAdvisor/issues). We will help ASAP. 
 In addition, we will appreciate any contribution to refine and optimize this 
 package.
 
 
 ##Copyright &copy;
 
-Permission is granted for anyone to copy, use, modify, or distribute this program and accompanying programs and documents for any purpose, provided this copyright notice is retained and prominently displayed, along with a 
-note saying that the original programs are available from our web page (http://tiic.github.io/LogAdvisor). The program is provided as-is, and there are no guarantees that it fits your purposes or that it is bug-free. All use of these programs is entirely at the user's own risk.	  
+Permission is granted for anyone to copy, use, modify, or distribute this program and accompanying programs and documents for any purpose, provided this copyright notice is retained and prominently displayed, along with a note saying that the original programs are available from our web page (http://cuhk-cse.github.io/LogAdvisor). The program is provided as-is, and there are no guarantees that it fits your purposes or that it is bug-free. All use of these programs is entirely at the user's own risk.	  
