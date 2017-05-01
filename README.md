@@ -29,8 +29,8 @@ user_study/             - the materials for user study
 
 ## Issues
 
-In case of questions or problems, please do not hesitate to report to our 
-issue page (https://github.com/logpai/LogAdvisor/issues). We will respond ASAP. 
+In case of questions or problems, please do not hesitate to report to [the 
+issue page](https://github.com/logpai/LogAdvisor/issues). We will respond ASAP. 
 In addition, we appreciate any contribution to optimize and improve this 
 package.
 
