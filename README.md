@@ -1,24 +1,18 @@
-##LogAdvisor
+## LogAdvisor
 
-This repository maintains the source code for our project "Learning to Log", which aims to automatically learn the common logging practice from existing code repositories. The source code is used to extract all the data instances (including the extracted features and logging labels).
+This repository maintains the source code for our project "Learning to Log", which aims to automatically learn the common logging practice from existing code repositories. The source code is used to extract all the data instances (including the extracted features and logging labels) in our work.
 
-Read more information: [[Paper](http://jiemingzhu.github.io/pub/jmzhu_icse2015.pdf)][[Project page](http://cuhk-cse.github.io/LogAdvisor)]
-
-
-##Citation
-
-If you use any benchmark in published research, please kindly \*cite* the following paper. Thanks!
-
-- Jieming Zhu, Pinjia He, Qiang Fu, Hongyu Zhang, Michael R. Lyu, and Dongmei Zhang, "Learning to Log: Helping Developers Make Informed Logging Decisions," in Proc. of ACM/IEEE ICSE, 2015.
+Read more information from our paper:
+- Jieming Zhu, Pinjia He, Qiang Fu, Hongyu Zhang, Michael R. Lyu, and Dongmei Zhang, "[Learning to Log: Helping Developers Make Informed Logging Decisions](http://jiemingzhu.github.io/pub/jmzhu_icse2015.pdf)," in Proc. of ACM/IEEE ICSE, 2015. [[Project page](http://logpai.github.io/LogAdvisor)]
 
 
-##Dependencies
+## Dependencies
 
 - Visual Studio 2012 or later
-- Roslyn: https://roslyn.codeplex.com
+- Roslyn: https://github.com/dotnet/roslyn
 
 
-##Code Archive
+## Code Archive
 
 ```
 data/
@@ -33,14 +27,13 @@ user_study/             - the materials for user study
 ```
 	  
 
-##Issues
+## Issues
 
 In case of questions or problems, please do not hesitate to report to our 
-issue page (https://github.com/CUHK-CSE/LogAdvisor/issues). We will help ASAP. 
-In addition, we will appreciate any contribution to refine and optimize this 
+issue page (https://github.com/logpai/LogAdvisor/issues). We will respond ASAP. 
+In addition, we appreciate any contribution to optimize and improve this 
 package.
 
 
-##Copyright &copy;
 
-Permission is granted for anyone to copy, use, modify, or distribute this program and accompanying programs and documents for any purpose, provided this copyright notice is retained and prominently displayed, along with a note saying that the original programs are available from our web page (http://cuhk-cse.github.io/LogAdvisor). The program is provided as-is, and there are no guarantees that it fits your purposes or that it is bug-free. All use of these programs is entirely at the user's own risk.	  
+Copyright &copy; 2017, The [LogPAI](https://github.com/logpai) Team  
