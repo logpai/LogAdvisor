@@ -1,9 +1,11 @@
-## LogAdvisor
+<p align="center"> <a href="https://github.com/logpai"> <img src="https://github.com/logpai/logpai.github.io/blob/master/img/logpai_logo.jpg" width="425"></a></p>
+
+# LogAdvisor
 
 This repository maintains the source code for our project "Learning to Log", which aims to automatically learn the common logging practice from existing code repositories. The source code is used to extract all the data instances (including the extracted features and logging labels) in our work.
 
 Read more information from our paper:
-- Jieming Zhu, Pinjia He, Qiang Fu, Hongyu Zhang, Michael R. Lyu, and Dongmei Zhang, "[Learning to Log: Helping Developers Make Informed Logging Decisions](http://jiemingzhu.github.io/pub/jmzhu_icse2015.pdf)," in Proc. of ACM/IEEE ICSE, 2015. [[Project page](http://logpai.github.io/LogAdvisor)]
+- Jieming Zhu, Pinjia He, Qiang Fu, Hongyu Zhang, Michael R. Lyu, and Dongmei Zhang, "[Learning to Log: Helping Developers Make Informed Logging Decisions](http://jiemingzhu.github.io/pub/jmzhu_icse2015.pdf)," in Proc. of ACM/IEEE ICSE, 2015.
 
 
 ## Dependencies
