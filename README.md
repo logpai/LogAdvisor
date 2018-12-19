@@ -5,8 +5,8 @@
 This repository maintains the source code for our project "Learning to Log", which aims to automatically learn the common logging practice from existing code repositories. The source code is used to extract all the data instances (including the extracted features and logging labels) in our work.
 
 Read more information from our paper:
-- Jieming Zhu, Pinjia He, Qiang Fu, Hongyu Zhang, Michael R. Lyu, and Dongmei Zhang. [Learning to Log: Helping Developers Make Informed Logging Decisions](http://jiemingzhu.github.io/pub/jmzhu_icse2015.pdf), International Conference on Software Engineering (ICSE), 2015.
-- Qiang Fu, Jieming Zhu, Wenlu Hu, Jian-Guang Lou, Rui Ding, Qingwei Lin, Dongmei Zhang, and Tao Xie. [Where Do Developers Log? An Empirical Study on Logging Practices in Industry](http://jmzhu.logpai.com/pub/qfu_icse2014.pdf), International Conference on Software Engineering (ICSE), 2014.
+- Jieming Zhu, Pinjia He, Qiang Fu, Hongyu Zhang, Michael R. Lyu, and Dongmei Zhang. [Learning to Log: Helping Developers Make Informed Logging Decisions](http://jiemingzhu.github.io/pub/jmzhu_icse2015.pdf), *International Conference on Software Engineering (ICSE)*, 2015.
+- Qiang Fu, Jieming Zhu, Wenlu Hu, Jian-Guang Lou, Rui Ding, Qingwei Lin, Dongmei Zhang, and Tao Xie. [Where Do Developers Log? An Empirical Study on Logging Practices in Industry](http://jmzhu.logpai.com/pub/qfu_icse2014.pdf), *International Conference on Software Engineering (ICSE)*, 2014.
 
 
 ## Dependencies
